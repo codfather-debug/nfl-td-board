@@ -4,6 +4,9 @@ on:
   schedule:
     # Every day at 12:00 UTC. Nothing is published unless the sheet changed.
     - cron: "0 12 * * *"
+    # Closer to kickoff on game days, so recorded plays reflect late injury news.
+    - cron: "0 16 * * 0,6"
+    - cron: "0 21 * * 1,4"
   workflow_dispatch:
 
 permissions:
@@ -21,12 +24,12 @@ jobs:
       - run: python build.py
       - name: Publish if changed
         run: |
-          git add index.html
+          git add index.html results
           if git diff --cached --quiet; then
             echo "Sheet unchanged."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Refresh data from sheet"
+            git commit -m "Refresh data and results"
             git push
           fi

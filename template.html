@@ -65,6 +65,7 @@ select, input[type="search"] { background: var(--surface); border: 1px solid var
 .chip .s { color: var(--star); }
 .flag { display: inline-block; font: 600 12px/1 var(--body); color: var(--accent); border: 1px solid currentColor; border-radius: 3px; padding: 2px 4px; margin-left: 3px; vertical-align: middle; white-space: nowrap; }
 .flag.bad { color: var(--bad); }
+.mini.results { min-width: 100%; } .mini.results td, .mini.results th { padding: 6px 10px; white-space: nowrap; }
 .adjust { padding: 0 12px 9px; font-size: 13.5px; color: var(--muted); }
 .RB { --c: var(--rb); } .WR { --c: var(--wr); } .TE { --c: var(--te); } .QB { --c: var(--qb); } .DST { --c: var(--dst); }
 
@@ -171,7 +172,7 @@ try {
   const saved = JSON.parse(localStorage.getItem(SAVED_KEY));
   if (saved && refreshedAt(saved) >= refreshedAt(D)) {
     const newerInjuries = (saved.injuriesAt || "") > (D.injuriesAt || "") ? saved : D;
-    D = { ...saved, recent: D.recent, model: D.model, lines: newerInjuries.lines, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
+    D = { ...saved, results: D.results, recent: D.recent, model: D.model, lines: newerInjuries.lines, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
   } else localStorage.removeItem(SAVED_KEY);
 } catch (e) { /* Storage is optional; the data built into the page still works. */ }
 
@@ -187,6 +188,18 @@ const sigmoid = x => 1 / (1 + Math.exp(-x));
 const predict = (c, f) => sigmoid(c.intercept + D.model.features.reduce((a, k) => a + c[k] * f[k], 0));
 const tierFor = (tiers, p) => tiers.reduce((best, t) => p >= t.min ? t : best, tiers[0]);
 const hasStarted = line => !!line && (line.final || Date.now() >= new Date(line.kickoff).getTime());
+function starterScore(rz, x, first) { // Keep in step with starter_score in build.py.
+  return (rz + 2 * x.tds + 3 * first) / x.gp * (0.6 * (x.lastPlayed || 0) + 0.4 * (x.avgSnap || 0));
+}
+function choosePick(sheetPlayer, position, teamPlayers) { // Keep in step with choose_pick in build.py.
+  const atPosition = teamPlayers.filter(p => p.pos === position);
+  const available = atPosition.filter(p => !p.unavailable).sort((a, b) => b.starter - a.starter);
+  if (!available.length) return null;
+  const best = available[0], sheet = atPosition.find(p => p.player === sheetPlayer);
+  if (!sheet || sheet.unavailable) return best;
+  const clear = best !== sheet && best.starter >= 1.25 * sheet.starter && best.lastPlayed >= sheet.lastPlayed + 0.10 && best.rzPerGame >= sheet.rzPerGame;
+  return clear ? best : sheet;
+}
 function scorePlayers() {
   const firsts = {};
   D.log.forEach(l => { if (l["Team 1st TD Scorer"]) { const k = l.Team + "|" + l["Team 1st TD Scorer"]; firsts[k] = (firsts[k] || 0) + 1; } });
@@ -202,7 +215,8 @@ function scorePlayers() {
     const status = injuryStatus(u.team, u.player), pAny = predict(D.model.any, f), pFirst = predict(D.model.first, f);
     const firstTier = tierFor(D.model.firstTiers, pFirst), rz = (u.rz_targets || 0) + (u.rz_carries || 0);
     D.players.push({ player: u.player, team: u.team, opp: slate.opp, pos: u.pos, day: slate.day, kick: slate.kick, imp, hasLine: !!line, started: hasStarted(line),
-      rzsh: f.rzsh, i10sh: f.i10sh, snap: x.last, missedLast: !x.last, status, unavailable: !!UNAVAILABLE[status] || !x.recent,
+      rzsh: f.rzsh, i10sh: f.i10sh, snap: x.last, missedLast: !x.last, status, unavailable: !!UNAVAILABLE[status] || (!x.recent && status !== "Active"),
+      lastPlayed: x.lastPlayed || 0, rzPerGame: rz / x.gp, starter: starterScore(rz, x, firsts[u.team + "|" + u.player] || 0),
       pAny, pFirst, anyRate: tierFor(D.model.anyTiers, pAny).hit, firstRate: firstTier.hit, gameRate: firstTier.game,
       rz: `${rz} (${Math.round(f.rzsh * 100)}%)`, tds: x.tds, first: firsts[u.team + "|" + u.player] || 0 });
   }
@@ -213,15 +227,22 @@ function scorePlayers() {
     const line = lines[r.team];
     r.imp = line ? line.imp : null; r.started = hasStarted(line);
     if (line && D.model) { r.gameFirst = Math.round(sigmoid(D.model.gameFirstSlope * line.margin) * 100) + "%"; r.gameFirstVegas = true; }
-    const cands = D.players.filter(p => p.team === r.team && !p.unavailable).sort((a, b) => b.pFirst - a.pFirst);
-    if (!cands.length) continue;
-    const best = cands[0], sheet = D.players.find(p => p.team === r.team && p.player === r.player);
-    if (best.player !== r.player) {
-      const why = UNAVAILABLE[r.status] ? `${UNAVAILABLE[r.status]}` : sheet ? `${Math.round(sheet.rzsh * 100)}% of red-zone work vs. ${Math.round(best.rzsh * 100)}%` : "not in recent usage";
-      r.adjust = `Sheet's pick: ${r.player} (${why}).`;
+    const mine = D.players.filter(p => p.team === r.team), best = choosePick(r.player, r.pos, mine);
+    const sheet = mine.find(p => p.player === r.player);
+    if (!best) {
+      if (UNAVAILABLE[r.status]) r.adjust = `${r.player} is ${UNAVAILABLE[r.status]}, and no other ${r.pos} is available.`;
+      continue;
     }
-    Object.assign(r, { player: best.player, pos: best.pos, status: best.status, rz: best.rz, tds: best.tds, first: best.first, rzsh: best.rzsh,
-      firstRate: best.firstRate, gameRate: best.gameRate, pFirst: best.pFirst, missedLast: best.missedLast, alt: cands[1] ? `${cands[1].player} (${cands[1].pos}, ${cands[1].rz} red zone)` : "None" });
+    if (best.player !== r.player) {
+      const pc = v => Math.round(v * 100) + "%", back = best.status === "Active" && best.missedLast ? " Off the injury report and back." : "";
+      r.adjust = !sheet ? `Changed from ${r.player}, who hasn't played enough this season.${back}`
+        : sheet.unavailable ? `Changed from ${r.player}, who is ${UNAVAILABLE[sheet.status] || "not playing recently"}.${back}`
+        : `Changed from ${r.player}: ${best.player} is the starter, with ${pc(best.lastPlayed)} of snaps in the latest game played vs. ${pc(sheet.lastPlayed)}, and ${best.rzPerGame.toFixed(1)} red-zone chances per game vs. ${sheet.rzPerGame.toFixed(1)}.${back}`;
+    }
+    const next = mine.filter(p => p.pos === r.pos && !p.unavailable && p !== best).sort((a, b) => b.starter - a.starter)[0];
+    Object.assign(r, { player: best.player, status: best.status, rz: best.rz, tds: best.tds, first: best.first, rzsh: best.rzsh,
+      firstRate: best.firstRate, gameRate: best.gameRate, pFirst: best.pFirst, missedLast: best.missedLast,
+      alt: next ? `${next.player} (${next.rz} red zone)` : "None" });
   }
 }
 scorePlayers();
@@ -234,7 +255,7 @@ const nick = a => D.nicks[a] || a;
 const byTeam = (arr, key = "Team") => Object.fromEntries(arr.map(r => [r[key], r]));
 const allowed = byTeam(D.allowed), fScored = byTeam(D.firstScored), fAllowed = byTeam(D.firstAllowed);
 const tw = byTeam(D.thisWeek, "abbr");
-const state = { tab: "plays", day: "All", pos: "All", open: null, game: null, plays: { pos: "All", day: "All", started: false },
+const state = { tab: "plays", day: "All", pos: "All", open: null, game: null, plays: { pos: "All", day: "All", started: false }, resultsWeek: "All",
   def: { key: "TDs/G", dir: -1, open: null }, ply: { q: "", team: "All", pos: "All", key: "rz_opp_share", dir: -1 },
   log: { team: "All", week: "All", pos: "All", side: "team" } };
 
@@ -260,7 +281,7 @@ function mixBar(label, s) {
       `<span class="${p === "DEF/ST" ? "DST" : p}" style="width:${n / total * 100}%" title="${p} ${n}">${p === "DEF/ST" ? "D" : p} ${n}</span>`).join("")}</div></div>`;
 }
 
-const TABS = [["plays", "Top TD Plays"], ["picks", "1st TD Picks"], ["matchups", "Matchups"], ["defenses", "TDs Allowed"], ["players", "Player Usage"], ["log", "1st TD Log"]];
+const TABS = [["plays", "Top TD Plays"], ["picks", "1st TD Picks"], ["matchups", "Matchups"], ["defenses", "TDs Allowed"], ["players", "Player Usage"], ["log", "1st TD Log"], ["results", "Results"]];
 function go(tab, extra) {
   state.tab = tab; Object.assign(state, extra || {});
   render(); scrollTo(0, 0);
@@ -277,9 +298,11 @@ function seg(name, opts, cur) {
 
 /* ---- Shared tags ---- */
 const pctText = v => v == null ? "–" : Math.round(v * 100) + "%";
-const statusTag = r => (r.status ? `<span class="flag bad">${esc(r.status)}</span>` : "") + (r.missedLast && !r.started ? `<span class="flag bad">Missed last game</span>` : "");
+const statusTag = r => r.status === "Active" && r.missedLast ? `<span class="flag">Back from injury</span>`
+  : (r.status && r.status !== "Active" ? `<span class="flag bad">${esc(r.status)}</span>` : "") + (r.missedLast && !r.started ? `<span class="flag bad">Missed last game</span>` : "");
+const lowRoleTag = r => r.rzsh != null && r.rzsh < 0.05 ? `<span class="flag bad">Small red-zone role</span>` : "";
 const changedCount = () => D.slate.filter(r => r.player !== r.sheetPlayer).length;
-const changedTag = r => r.player !== r.sheetPlayer ? `<span class="flag">Differs from sheet</span>` : "";
+const changedTag = r => r.player !== r.sheetPlayer ? `<span class="flag">Player changed</span>` : "";
 const startedTag = r => r.started ? `<span class="flag">Started</span>` : "";
 const injuriesWhen = () => D.injuriesAt ? ` (${new Date(D.injuriesAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })})` : "";
 
@@ -322,11 +345,11 @@ function viewPicks() {
   const shown = games.filter(g => (state.day === "All" || g[0].day === state.day) && g.some(match));
   const top = [...D.slate].filter(r => r.pFirst != null && !r.started).sort((a, b) => b.pFirst - a.pFirst).slice(0, 8);
   let html = `<section class="stack" style="gap:10px"><div><h2>First TD picks, Week ${D.week}</h2>
-    <p class="hint">The player on each team most likely to score that team's first touchdown, ranked on the player's own role, not a position pick. Rates show how often similar players did it when tested on a season the model didn't train on. Even the best plays land less than half the time. ${changedCount()} picks differ from your sheet. Injuries checked${injuriesWhen()}. Check game-day inactives before betting.</p></div>
+    <p class="hint">Your sheet picks the position for each team's first touchdown. The app then names that position's healthy starter: injured players are removed, and a starter who's off the injury report comes back in. ${changedCount()} players changed from your sheet this week. Rates show how often similar players scored first when tested on a season the model didn't train on, and even the best land less than half the time. Injuries checked${injuriesWhen()}. Check game-day inactives before betting.</p></div>
     ${top.length ? `<h3>Best first TD plays still to come</h3>
     <div class="tops">${top.map(t => `<button class="top-card" data-game="${esc(t.team)}">
-      <div class="l1"><span>${esc(t.team)} ${esc(t.opp)}</span><span class="chip ${esc(t.pos)}">${esc(t.pos)}</span></div>
-      <div class="name">${esc(t.player)} ${statusTag(t)}</div>
+      <div class="l1"><span>${esc(t.team)} ${esc(t.opp)}</span>${chip(t.pick)}</div>
+      <div class="name">${esc(t.player)} ${statusTag(t)}${lowRoleTag(t)}</div>
       <div class="meter"><i style="width:${(t.firstRate || 0) * 100}%"></i></div>
       <div class="l3"><span><b>${pctText(t.firstRate)}</b> team's 1st</span><span><b>${pctText(t.gameRate)}</b> game's 1st</span><span><b>${esc(t.rz)}</b> RZ</span></div>
     </button>`).join("")}</div>` : ""}</section>
@@ -349,8 +372,8 @@ function pickRow(r) {
   const gf = parseInt(r.gameFirst);
   return `<button class="pr" data-open="${esc(r.team)}" aria-expanded="${open}">
     <span class="team">${esc(r.team)}<em>${esc(r.opp)}</em></span>
-    <span class="pk"><span class="chip ${esc(r.pos)}">${esc(r.pos)}</span></span>
-    <span class="who">${esc(r.player)} ${statusTag(r)}${changedTag(r)}${startedTag(r)}</span>
+    <span class="pk">${chip(r.pick)}</span>
+    <span class="who">${esc(r.player)} ${statusTag(r)}${lowRoleTag(r)}${changedTag(r)}${startedTag(r)}</span>
     <span class="conf"><span>${pctText(r.firstRate)}</span><span class="meter"><i style="width:${(r.firstRate || 0) * 100}%"></i></span></span>
     <span class="statline">
       <span class="num rz"><span class="lbl">RZ </span>${esc(r.rz)}</span>
@@ -458,7 +481,7 @@ const PLY_COLS = [["player", "Player", "t"], ["team", "Team", "t"], ["pos", "Pos
 function plyFiltered() {
   const { q, team, pos, key, dir } = state.ply; const needle = q.trim().toLowerCase();
   const rows = D.usage.filter(u => (team === "All" || u.team === team) && (pos === "All" || u.pos === pos) && (!needle || u.player.toLowerCase().includes(needle)))
-    .map(u => ({ ...u, first: firstCount[u.team + "|" + u.player] || 0, estAny: playerLookup[u.team + "|" + u.player]?.anyRate, status: injuryStatus(u.team, u.player), lastSnap: ((D.recent || {})[u.team] || {})[u.player]?.last }));
+    .map(u => ({ ...u, first: firstCount[u.team + "|" + u.player] || 0, estAny: playerLookup[u.team + "|" + u.player]?.anyRate, status: injuryStatus(u.team, u.player) === "Active" ? "" : injuryStatus(u.team, u.player), lastSnap: ((D.recent || {})[u.team] || {})[u.player]?.last }));
   rows.sort((a, b) => (typeof a[key] === "string" ? a[key].localeCompare(b[key]) : (a[key] || 0) - (b[key] || 0)) * dir);
   return rows;
 }
@@ -476,6 +499,43 @@ function fillPlayers() {
   $("#ply-table").innerHTML = rows.length ? `<table class="data"><thead><tr>${PLY_COLS.map(([k, l, f]) =>
     `<th class="${f === "t" ? "t" : ""}" aria-sort="${key === k ? (dir > 0 ? "ascending" : "descending") : "none"}"><button data-plysort="${k}">${l}</button></th>`).join("")}</tr></thead>
     <tbody>${rows.slice(0, 150).map(r => `<tr>${PLY_COLS.map(([k, , f]) => k === "pos" ? `<td class="t"><span class="chip ${esc(r.pos)}">${esc(r.pos)}</span></td>` : f === "t" ? `<td class="t" ${k === "player" ? 'style="font-weight:600"' : ""}>${esc(r[k])}</td>` : `<td>${f === "p" ? pct(r[k]) : (r[k] ?? 0)}</td>`).join("")}</tr>`).join("")}</tbody></table>` : `<div class="empty">No players match. Clear the search or pick another team.</div>`;
+}
+
+/* ---- Results: recorded before kickoff, graded after the game. ---- */
+const record = (rows, field) => {
+  const hits = rows.filter(e => e[field] === true).length;
+  return { n: rows.length, hits, rate: rows.length ? hits / rows.length : null };
+};
+const recordText = r => r.n ? `${r.hits} of ${r.n} (${pctText(r.rate)})` : "No results yet";
+function viewResults() {
+  const all = (D.results || {}).plays || [];
+  const intro = `<div><h2>Results</h2><p class="hint">How the app's plays did. Each play is recorded before its game kicks off and graded after the final, starting with the last game of Week 8. Earlier weeks aren't included because the model was built on them. Players who didn't play are left out of hit rates and listed separately. Early records are small samples, so a good or bad few weeks can be luck.</p></div>`;
+  if (!all.length) return intro + `<div class="empty">No plays recorded yet. They appear here before the next kickoff.</div>`;
+  const plays = all.filter(e => e.isPlay && e.anyTd !== undefined && e.played);
+  const tiers = [...new Set(all.filter(e => e.isPlay).map(e => pctText(e.anyRate)))].sort((a, b) => parseInt(b) - parseInt(a));
+  const firsts = field => { const rows = all.filter(e => e[field] && e.teamFirst !== undefined && e.played !== false); return { team: record(rows, "teamFirst"), game: record(rows, "gameFirst"), any: record(rows.filter(e => e.anyTd !== undefined), "anyTd") }; };
+  const app = firsts("isPick"), sheet = firsts("isSheet");
+  const pending = all.filter(e => (e.isPlay || e.isPick) && e.anyTd === undefined).length;
+  const dnp = all.filter(e => e.isPlay && e.played === false).length;
+  const weeks = [...new Set(all.map(e => e.week))].sort((a, b) => b - a);
+  const shown = all.filter(e => (e.isPlay || e.isPick) && (state.resultsWeek === "All" || String(e.week) === state.resultsWeek))
+    .sort((a, b) => b.week - a.week || (b.anyRate || 0) - (a.anyRate || 0));
+  const mark = v => v === true ? '<span class="pos">Yes</span>' : v === false ? "No" : "Pending";
+  return intro + `<section class="stack" style="gap:10px"><h3>Any TD plays by tier</h3>
+    <div class="tablebox"><table class="mini results"><thead><tr><th>Tier tested at</th><th>Actual hit rate</th></tr></thead><tbody>
+      ${tiers.map(t => `<tr><td>About ${t}</td><td>${recordText(record(plays.filter(e => pctText(e.anyRate) === t), "anyTd"))}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="hint">${pending} plays waiting on a result. ${dnp} recorded players didn't play.</p></section>
+  <section class="stack" style="gap:10px"><h3>First TD picks: app vs. your sheet</h3>
+    <div class="tablebox"><table class="mini results"><thead><tr><th>Pick came from</th><th>Team's 1st TD</th><th>Game's 1st TD</th><th>Any TD</th></tr></thead><tbody>
+      <tr><td>App</td><td>${recordText(app.team)}</td><td>${recordText(app.game)}</td><td>${recordText(app.any)}</td></tr>
+      <tr><td>Your sheet</td><td>${recordText(sheet.team)}</td><td>${recordText(sheet.game)}</td><td>${recordText(sheet.any)}</td></tr>
+    </tbody></table></div></section>
+  <section class="stack" style="gap:10px"><div class="filters"><h3>Every recorded play</h3>
+    <select id="results-week" aria-label="Week"><option value="All">All weeks</option>${weeks.map(w => `<option value="${w}" ${String(w) === state.resultsWeek ? "selected" : ""}>Week ${w}</option>`).join("")}</select></div>
+    <div class="tablebox"><table class="data"><thead><tr><th class="t"><button>Wk</button></th><th class="t"><button>Player</button></th><th class="t"><button>Game</button></th><th><button>Any TD tier</button></th><th><button>Scored TD</button></th><th><button>Team's 1st</button></th><th><button>Game's 1st</button></th></tr></thead><tbody>
+      ${shown.map(e => `<tr><td class="t">${e.week}</td><td class="t" style="font-weight:600">${esc(e.player)} <span class="chip ${esc(e.pos)}">${esc(e.pos)}</span>${e.isPick ? '<span class="flag">1st TD pick</span>' : ""}${e.played === false ? '<span class="flag bad">Didn\u2019t play</span>' : ""}</td><td class="t">${esc(e.team)} ${esc(e.opp)}</td><td>${pctText(e.anyRate)}</td><td>${e.played === false ? "–" : mark(e.anyTd)}</td><td>${e.played === false ? "–" : mark(e.teamFirst)}</td><td>${e.played === false ? "–" : mark(e.gameFirst)}</td></tr>`).join("")}
+    </tbody></table></div></section>`;
 }
 
 /* ---- Log ---- */
@@ -501,7 +561,7 @@ function viewLog() {
 
 function render() {
   renderTabs();
-  $("#view").innerHTML = { plays: viewPlays, picks: viewPicks, matchups: viewMatchups, defenses: viewDefenses, players: viewPlayers, log: viewLog }[state.tab]();
+  $("#view").innerHTML = { results: viewResults, plays: viewPlays, picks: viewPicks, matchups: viewMatchups, defenses: viewDefenses, players: viewPlayers, log: viewLog }[state.tab]();
   if (state.tab === "players") fillPlayers();
 }
 
@@ -533,6 +593,7 @@ $("#view").addEventListener("change", e => {
   if (id === "ply-team") { state.ply.team = v; fillPlayers(); }
   if (id === "log-team") { state.log.team = v; render(); }
   if (id === "log-week") { state.log.week = v; render(); }
+  if (id === "results-week") { state.resultsWeek = v; render(); }
 });
 $("#view").addEventListener("input", e => { if (e.target.id === "ply-q") { state.ply.q = e.target.value; fillPlayers(); } });
 
@@ -644,7 +705,7 @@ function parseInjuries(json) { // Keep in step with injuries in build.py.
       if (!latest[key] || (item.date || "") > latest[key][0]) latest[key] = [item.date || "", item.status];
     }
   }
-  return Object.fromEntries(Object.entries(latest).filter(([, v]) => ["Out", "Doubtful", "Questionable", "Injured Reserve", "Suspension"].includes(v[1])).map(([k, v]) => [k, v[1]]));
+  return Object.fromEntries(Object.entries(latest).filter(([, v]) => ["Active", "Out", "Doubtful", "Questionable", "Injured Reserve", "Suspension"].includes(v[1])).map(([k, v]) => [k, v[1]]));
 }
 $("#update-btn").onclick = async () => {
   const btn = $("#update-btn"), status = $("#update-status");

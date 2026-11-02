@@ -9,6 +9,7 @@ import csv
 import datetime
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -28,7 +29,7 @@ STATS_URL = f"{NFLVERSE}/stats_player/stats_player_week_2026.csv"
 LINES_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
 INJURIES_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries"
 RECENT_WEIGHTS = (0.6, 0.25, 0.15)  # Team's last game first.
-WATCHED_STATUSES = {"Out", "Doubtful", "Questionable", "Injured Reserve", "Suspension"}
+WATCHED_STATUSES = {"Active", "Out", "Doubtful", "Questionable", "Injured Reserve", "Suspension"}
 
 
 def fetch(url):
@@ -121,6 +122,7 @@ def recent_usage(usage, counted):
             "gp": sum(1 for w in played if (team, w) in counted),
             "last": last[0] if last else 0,
             "lastPlayed": by_player[key][played[-1]] if played else 0,
+            "avgSnap": round(sum(by_player[key][w] for w in played) / len(played), 3) if played else 0,
             "recent": round(sum(a * b for a, b in zip(weights, last)) / sum(weights), 3) if last else 0,
             "tds": tds[(team, name)],
         }
@@ -137,6 +139,149 @@ def injuries(nicks):
             if key not in latest or item.get("date", "") > latest[key][0]:
                 latest[key] = (item.get("date", ""), item.get("status"))
     return {k: v[1] for k, v in latest.items() if v[1] in WATCHED_STATUSES}
+
+
+HISTORY_PATH = os.path.join(HERE, "results", "history.json")
+UNAVAILABLE = {"Out", "Doubtful", "Injured Reserve", "Suspension"}
+LOWEST_TRACKED_ANY_RATE = 0.29
+
+
+def sigmoid(x):
+    return 1 / (1 + math.exp(-x))
+
+
+def tier_for(tiers, p):
+    return [t for t in tiers if p >= t["min"]][-1]
+
+
+def starter_score(u, x, first):
+    """Production per game played, weighted by snaps. Same as starterScore in template.html."""
+    rz = (u["rz_targets"] or 0) + (u["rz_carries"] or 0)
+    return (rz + 2 * x["tds"] + 3 * first) / x["gp"] * (0.6 * (x["lastPlayed"] or 0) + 0.4 * (x["avgSnap"] or 0))
+
+
+def choose_pick(sheet_player, position, team_players):
+    """The healthy starter at the sheet's position. Same as choosePick in template.html."""
+    at_position = [p for p in team_players if p["pos"] == position]
+    available = sorted((p for p in at_position if not p["unavailable"]), key=lambda p: -p["starter"])
+    if not available:
+        return None
+    best = available[0]
+    sheet = next((p for p in at_position if p["player"] == sheet_player), None)
+    if not sheet or sheet["unavailable"]:
+        return best
+    clear = best is not sheet and best["starter"] >= 1.25 * sheet["starter"] \
+        and best["lastPlayed"] >= sheet["lastPlayed"] + 0.10 and best["rzPerGame"] >= sheet["rzPerGame"]
+    return best if clear else sheet
+
+
+def score_players(data):
+    """Same scoring as scorePlayers in template.html. Keep the two in step."""
+    model, rows, players = data["model"], {r["team"]: r for r in data["slate"]}, []
+    firsts = collections.Counter((l["Team"], l.get("Team 1st TD Scorer")) for l in data["log"])
+    for u in data["usage"]:
+        x = data["recent"].get(u["team"], {}).get(u["player"])
+        line = data["lines"].get(u["team"])
+        if u["team"] not in rows or not x or x["gp"] < 2 or u["pos"] not in ("RB", "WR", "TE", "QB") or not line:
+            continue
+        f = {"oppg": ((u["targets"] or 0) + (u["carries"] or 0)) / x["gp"], "rzsh": u["rz_opp_share"] or 0,
+             "i10sh": u["i10_opp_share"] or 0, "snaplast": x["lastPlayed"] or 0, "imp": line["imp"],
+             "isRB": int(u["pos"] == "RB"), "isWR": int(u["pos"] == "WR"), "isTE": int(u["pos"] == "TE"), "isQB": int(u["pos"] == "QB")}
+        predict = lambda c: sigmoid(c["intercept"] + sum(c[k] * f[k] for k in model["features"]))
+        status = data["injuries"].get(f"{u['team']}|{norm_name(u['player'])}", "")
+        p_any, p_first = predict(model["any"]), predict(model["first"])
+        first_tier = tier_for(model["firstTiers"], p_first)
+        players.append({"player": u["player"], "team": u["team"], "pos": u["pos"], "status": status,
+                        "unavailable": status in UNAVAILABLE or (not x["recent"] and status != "Active"),
+                        "starter": starter_score(u, x, firsts[(u["team"], u["player"])]),
+                        "rzPerGame": ((u["rz_targets"] or 0) + (u["rz_carries"] or 0)) / x["gp"],
+                        "lastPlayed": x["lastPlayed"] or 0, "pAny": p_any, "pFirst": p_first,
+                        "anyRate": tier_for(model["anyTiers"], p_any)["hit"],
+                        "firstRate": first_tier["hit"], "gameRate": first_tier["game"]})
+    players.sort(key=lambda p: -p["pAny"])
+    return players
+
+
+def snapshot_plays(data, history, now):
+    """Replace the recorded plays for games that haven't kicked off. Started games stay locked."""
+    if not data["recent"] or not data["injuriesAt"] or not data["lines"]:
+        return
+    players = score_players(data)
+    week = data["week"]
+    for r in data["slate"]:
+        team, line = r["team"], data["lines"].get(r["team"])
+        if not line or line["final"] or now >= datetime.datetime.fromisoformat(line["kickoff"]):
+            continue
+        mine = [p for p in players if p["team"] == team]
+        available = [p for p in mine if not p["unavailable"]]
+        if not available:
+            continue
+        chosen = choose_pick(r["player"], r["pick"].split()[0], mine)
+        pick = chosen["player"] if chosen else None
+        entries = {}
+        for p in available:
+            if p["anyRate"] >= LOWEST_TRACKED_ANY_RATE or p["player"] == pick:
+                entries[p["player"]] = {k: (round(p[k], 3) if isinstance(p[k], float) else p[k])
+                                        for k in ("player", "pos", "status", "anyRate", "firstRate", "gameRate")}
+                entries[p["player"]].update(isPlay=p["anyRate"] >= LOWEST_TRACKED_ANY_RATE, isPick=p["player"] == pick, isSheet=False)
+        sheet = r["player"]
+        entries.setdefault(sheet, {"player": sheet, "pos": r["pick"].split()[0], "status": "", "isPlay": False, "isPick": False})["isSheet"] = True
+        history["plays"] = [e for e in history["plays"] if not (e["week"] == week and e["team"] == team)]
+        history["plays"] += [{"week": week, "team": team, "opp": r["opp"], "imp": line["imp"], "lockedAt": now.strftime("%Y-%m-%dT%H:%MZ"), **e}
+                             for e in entries.values()]
+
+
+def grade_plays(history, log):
+    """Fill in results once a game is final and its player data has been published."""
+    pending = [e for e in history["plays"] if "anyTd" not in e or "teamFirst" not in e]
+    if not pending:
+        return
+    finals = set()
+    for g in fetch_csv(LINES_URL):
+        if g["season"] == "2026" and g["result"]:
+            finals |= {(g["home_team"], int(g["week"])), (g["away_team"], int(g["week"]))}
+    snaps, tds, stat_games = {}, collections.Counter(), set()
+    snap_games = set()
+    for r in fetch_csv(SNAPS_URL):
+        snap_games.add((r["team"], int(r["week"])))
+        snaps[(r["team"], norm_name(r["player"]), int(r["week"]))] = float(r["offense_pct"] or 0)
+    for r in fetch_csv(STATS_URL):
+        stat_games.add((r["team"], int(r["week"])))
+        tds[(r["team"], norm_name(r["player_display_name"]), int(r["week"]))] += int(
+            float(r["rushing_tds"] or 0) + float(r["receiving_tds"] or 0))
+    firsts = {(l["Team"], int(l["Week"])): l for l in log}
+    for e in pending:
+        game, name = (e["team"], e["week"]), norm_name(e["player"])
+        if game not in finals:
+            continue
+        if "anyTd" not in e and game in stat_games and game in snap_games:
+            surname = [k for k in snaps if k[0] == e["team"] and k[2] == e["week"] and k[1].split()[-1:] == name.split()[-1:]]
+            e["played"] = snaps.get((e["team"], name, e["week"]), 0) > 0 or tds[(e["team"], name, e["week"])] > 0 or (
+                len(surname) == 1 and snaps[surname[0]] > 0)
+            e["anyTd"] = tds[(e["team"], name, e["week"])] > 0
+        row = firsts.get(game)
+        if "teamFirst" not in e and row:
+            e["teamFirst"] = norm_name(row.get("Team 1st TD Scorer") or "") == name
+            e["gameFirst"] = norm_name(row.get("Game 1st TD Scorer") or "") == name
+
+
+def update_history(data):
+    history = {"plays": []}
+    if os.path.exists(HISTORY_PATH):
+        with open(HISTORY_PATH, encoding="utf-8") as f:
+            history = json.load(f)
+    try:
+        snapshot_plays(data, history, datetime.datetime.now(datetime.timezone.utc))
+    except Exception as e:
+        print(f"Could not record this week's plays: {e}")
+    try:
+        grade_plays(history, data["log"])
+    except Exception as e:
+        print(f"Could not grade results: {e}")
+    os.makedirs(os.path.dirname(HISTORY_PATH), exist_ok=True)
+    with open(HISTORY_PATH, "w", encoding="utf-8") as f:
+        json.dump(history, f, indent=0, ensure_ascii=False)
+    return history
 
 
 def validate(data):
@@ -305,6 +450,7 @@ def main(path):
         data["lines"] = {}
     with open(os.path.join(HERE, "model", "model.json"), encoding="utf-8") as f:
         data["model"] = json.load(f)
+    data["results"] = update_history(data)
     payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/")
     with open(os.path.join(HERE, "template.html"), encoding="utf-8") as f:
         html = f.read()
