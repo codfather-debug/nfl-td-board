@@ -452,10 +452,11 @@ function parseWorkbook(buffer) {
   const wb = XLSX.read(buffer, { type: "array" });
   const clean = v => typeof v === "number" ? (Number.isInteger(v) ? v : Math.round(v * 1000) / 1000)
     : typeof v === "string" ? v.trim() : v ?? null;
-  const rows = name => {
+  const rawRows = name => {
     if (!wb.Sheets[name]) throw new Error(`The sheet has no "${name}" tab.`);
-    return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null, blankrows: true }).map(r => r.map(clean));
+    return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null, blankrows: true });
   };
+  const rows = name => rawRows(name).map(r => r.map(clean));
   const zip = (keys, vals) => Object.fromEntries(keys.map((k, i) => [k, vals[i] ?? null]).filter(([k]) => k));
   const table = name => {
     const [head, ...rest] = rows(name);
@@ -492,12 +493,12 @@ function parseWorkbook(buffer) {
     if (POS.includes(r[0])) { add(off, r[1], r[0], r[5] || 0, r[6] || 0, r[4] || 0); add(dfn, r[2], r[0], r[5] || 0, r[6] || 0, r[4] || 0); }
   }
 
-  const weekRows = rows("This Weeks TDs");
+  const weekRows = rawRows("This Weeks TDs").map(r => r.map((v, i) => i === 1 ? timeText(v) : clean(v)));
   const twKeys = ["slot", "kick", "team", "opp", "pick", "lean", "teamTd", "oppTd", "top", "share", "rzShare", "i10Share", "second", "secondShare", "rzRun", "i10Run", "oppRzRun"];
   const thisWeek = []; let slot = null, twKick = null;
   for (const r of weekRows.slice(headerAt(weekRows, "Slot") + 1)) {
     if (!r[2]) continue;
-    slot = r[0] || slot; twKick = timeText(r[1]) || twKick;
+    slot = r[0] || slot; twKick = r[1] || twKick;
     const rec = zip(twKeys, [slot, twKick, ...r.slice(2)]);
     rec.abbr = nickToAbbr[rec.team] || rec.team;
     thisWeek.push(rec);
@@ -522,6 +523,8 @@ function parseWorkbook(buffer) {
   return data;
 }
 window.parseWorkbook = parseWorkbook;
+const signature = d => JSON.stringify([d.week, d.refreshed, d.log.length, d.slate.map(r => [r.team, r.pick, r.player, r.conf, r.gameFirst]),
+  d.allowed.map(r => [r.Team, r["TDs Allowed"]]), d.usage.map(r => [r.player, r.targets, r.carries])]);
 $("#update-btn").onclick = async () => {
   const btn = $("#update-btn"), status = $("#update-status");
   btn.disabled = true; status.textContent = "Updating…";
@@ -530,7 +533,7 @@ $("#update-btn").onclick = async () => {
     const resp = await fetch(EXPORT_URL);
     if (!resp.ok) throw new Error("Couldn't reach the sheet. Check that it's still shared by link, then try again.");
     const fresh = parseWorkbook(await resp.arrayBuffer());
-    if (JSON.stringify(fresh) === JSON.stringify(D)) { status.textContent = `Already current: Week ${D.week}`; return; }
+    if (signature(fresh) === signature(D)) { status.textContent = `Already current: Week ${D.week}`; return; }
     localStorage.setItem(SAVED_KEY, JSON.stringify(fresh));
     location.hash = state.tab;
     location.reload();
