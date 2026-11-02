@@ -5,12 +5,14 @@ Usage: python3 build.py [path/to/export.xlsx]
 With no path, downloads the sheet (it must be viewable by anyone with the link).
 """
 import collections
+import csv
 import datetime
 import io
 import json
 import os
 import re
 import sys
+import unicodedata
 import urllib.request
 
 import openpyxl
@@ -20,9 +22,87 @@ SHEET_ID = "1fwtkoY2KveC6TJPRyn0pvHPseVw2_4j2Qbud1x0q1pU"
 EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
 
+NFLVERSE = "https://github.com/nflverse/nflverse-data/releases/download"
+SNAPS_URL = f"{NFLVERSE}/snap_counts/snap_counts_2026.csv"
+STATS_URL = f"{NFLVERSE}/stats_player/stats_player_week_2026.csv"
+INJURIES_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries"
+RECENT_WEIGHTS = (0.6, 0.25, 0.15)  # Team's last game first.
+WATCHED_STATUSES = {"Out", "Doubtful", "Questionable", "Injured Reserve", "Suspension"}
+
+
+def fetch(url):
+    with urllib.request.urlopen(url, timeout=120) as resp:
+        return resp.read()
+
+
 def download():
-    with urllib.request.urlopen(EXPORT_URL, timeout=120) as resp:
-        return io.BytesIO(resp.read())
+    return io.BytesIO(fetch(EXPORT_URL))
+
+
+def fetch_csv(url):
+    return list(csv.DictReader(io.StringIO(fetch(url).decode("utf-8"))))
+
+
+def norm_name(name):
+    """Keep in step with normName in template.html."""
+    name = unicodedata.normalize("NFKD", name)
+    name = "".join(c for c in name if not unicodedata.combining(c)).lower()
+    name = re.sub(r"[.'’\-]", "", name)
+    name = re.sub(r"\s+(jr|sr|ii|iii|iv|v)$", "", name.strip())
+    return re.sub(r"\s+", " ", name)
+
+
+def recent_usage(usage):
+    """Games played, recent snap share and TDs for each player in the usage tab."""
+    snaps = [r for r in fetch_csv(SNAPS_URL) if r["game_type"] == "REG"]
+    stats = [r for r in fetch_csv(STATS_URL) if r["season_type"] == "REG"]
+    by_player = collections.defaultdict(dict)
+    positions = {}
+    team_weeks = collections.defaultdict(set)
+    for r in snaps:
+        week = int(r["week"])
+        key = (r["team"], norm_name(r["player"]))
+        team_weeks[r["team"]].add(week)
+        by_player[key][week] = float(r["offense_pct"] or 0)
+        positions[key] = r["position"]
+    tds = collections.Counter()
+    for r in stats:
+        tds[(r["team"], norm_name(r["player_display_name"]))] += int(
+            float(r["rushing_tds"] or 0) + float(r["receiving_tds"] or 0))
+
+    out = collections.defaultdict(dict)
+    for u in usage:
+        team, name = u["team"], norm_name(u["player"])
+        key = (team, name)
+        if key not in by_player:
+            # Same player, different first name in the snap data (Bam/Zonovan Knight).
+            same = [k for k, p in positions.items()
+                    if k[0] == team and p == u["pos"] and k[1].split()[-1:] == name.split()[-1:]]
+            if len(same) != 1:
+                continue
+            key = same[0]
+        weeks = sorted(team_weeks[team])
+        last = [by_player[key].get(w, 0) for w in reversed(weeks[-len(RECENT_WEIGHTS):])]
+        weights = RECENT_WEIGHTS[: len(last)]
+        out[team][u["player"]] = {
+            "gp": sum(1 for v in by_player[key].values() if v > 0),
+            "last": last[0] if last else 0,
+            "recent": round(sum(a * b for a, b in zip(weights, last)) / sum(weights), 3) if last else 0,
+            "tds": tds[(team, name)],
+        }
+    return out
+
+
+def injuries(nicks):
+    """Latest ESPN status by team and player. Keep in step with parseInjuries in template.html."""
+    latest = {}
+    for team in json.loads(fetch(INJURIES_URL)).get("injuries", []):
+        abbr = next((a for a, n in nicks.items() if team.get("displayName", "").endswith(n)), None)
+        for item in team.get("injuries", []):
+            key = f"{abbr}|{norm_name(item['athlete']['displayName'])}"
+            if key not in latest or item.get("date", "") > latest[key][0]:
+                latest[key] = (item.get("date", ""), item.get("status"))
+    return {k: v[1] for k, v in latest.items() if v[1] in WATCHED_STATUSES}
 
 
 def validate(data):
@@ -172,6 +252,18 @@ def main(path):
         "nicks": {v: k for k, v in nick.items()},
     }
     validate(data)
+    # These sources are extras: if one is down, the page falls back to the sheet's picks.
+    try:
+        data["recent"] = recent_usage(usage)
+    except Exception as e:
+        print(f"Snap data unavailable: {e}")
+        data["recent"] = {}
+    try:
+        data["injuries"] = injuries(data["nicks"])
+        data["injuriesAt"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception as e:
+        print(f"Injury data unavailable: {e}")
+        data["injuries"], data["injuriesAt"] = {}, ""
     payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/")
     with open(os.path.join(HERE, "template.html"), encoding="utf-8") as f:
         html = f.read()

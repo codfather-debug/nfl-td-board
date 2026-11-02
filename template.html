@@ -63,6 +63,9 @@ select, input[type="search"] { background: var(--surface); border: 1px solid var
 
 .chip { display: inline-flex; align-items: center; gap: 3px; font: 700 15px/1 var(--display); letter-spacing: .04em; color: var(--c, var(--fg)); border: 1.5px solid var(--c, var(--line)); border-radius: 4px; padding: 3px 6px 2px; white-space: nowrap; }
 .chip .s { color: var(--star); }
+.flag { display: inline-block; font: 600 12px/1 var(--body); color: var(--accent); border: 1px solid currentColor; border-radius: 3px; padding: 2px 4px; margin-left: 3px; vertical-align: middle; white-space: nowrap; }
+.flag.bad { color: var(--bad); }
+.adjust { padding: 0 12px 9px; font-size: 13.5px; color: var(--muted); }
 .RB { --c: var(--rb); } .WR { --c: var(--wr); } .TE { --c: var(--te); } .QB { --c: var(--qb); } .DST { --c: var(--dst); }
 
 .tops { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 10px; }
@@ -166,9 +169,56 @@ const SAVED_KEY = "first-td-board-data";
 const refreshedAt = d => new Date(d.refreshed).getTime() || 0;
 try {
   const saved = JSON.parse(localStorage.getItem(SAVED_KEY));
-  if (saved && refreshedAt(saved) >= refreshedAt(D)) D = saved;
-  else localStorage.removeItem(SAVED_KEY);
+  if (saved && refreshedAt(saved) >= refreshedAt(D)) {
+    const newerInjuries = (saved.injuriesAt || "") > (D.injuriesAt || "") ? saved : D;
+    D = { ...saved, recent: D.recent, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
+  } else localStorage.removeItem(SAVED_KEY);
 } catch (e) { /* Storage is optional; the data built into the page still works. */ }
+
+/* ---- Player adjustment: positions stay the sheet's, only the player can change. ---- */
+const CHANGE_THRESHOLD = 1.25, MIN_SNAP_EDGE = 0.10;
+const UNAVAILABLE = { "Out": "out", "Doubtful": "doubtful", "Injured Reserve": "on injured reserve", "Suspension": "suspended" };
+function normName(name) { // Keep in step with norm_name in build.py.
+  return name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[.'’\-]/g, "")
+    .trim().replace(/\s+(jr|sr|ii|iii|iv|v)$/, "").replace(/\s+/g, " ");
+}
+const injuryStatus = (team, player) => (D.injuries || {})[`${team}|${normName(player || "")}`] || "";
+function adjustPicks() {
+  const firsts = {};
+  D.log.forEach(l => { if (l["Team 1st TD Scorer"]) { const k = l.Team + "|" + l["Team 1st TD Scorer"]; firsts[k] = (firsts[k] || 0) + 1; } });
+  const hasRecent = Object.keys(D.recent || {}).length > 0;
+  for (const r of D.slate) {
+    r.sheetPlayer = r.player;
+    r.status = injuryStatus(r.team, r.player);
+    const pos = r.pick.split(" ")[0], recent = (D.recent || {})[r.team] || {};
+    const cands = D.usage.filter(u => u.team === r.team && u.pos === pos && recent[u.player]).map(u => {
+      const x = recent[u.player], rz = (u.rz_targets || 0) + (u.rz_carries || 0);
+      const perGame = x.gp ? (rz + 2 * x.tds + 3 * (firsts[r.team + "|" + u.player] || 0)) / x.gp : 0;
+      return { u, x, rz, status: injuryStatus(r.team, u.player), rzPerGame: x.gp ? rz / x.gp : 0, score: perGame * x.recent };
+    });
+    const avail = cands.filter(c => !UNAVAILABLE[c.status] && c.x.recent > 0).sort((a, b) => b.score - a.score);
+    const current = cands.find(c => c.u.player === r.player);
+    const out = UNAVAILABLE[r.status], best = avail[0];
+    if (!best || (!hasRecent && !out)) { if (out) r.adjust = `${r.player} is ${out}, and no clear replacement was found.`; continue; }
+    const beats = current && best.u.player !== r.player && best.score >= CHANGE_THRESHOLD * current.score
+      && best.x.last >= current.x.last + MIN_SNAP_EDGE && best.rzPerGame >= current.rzPerGame;
+    if (!out && !beats) continue;
+    const pc = v => Math.round(v * 100) + "%";
+    r.adjust = out ? `Changed from ${r.player}, who is ${out}.`
+      : `Changed from ${r.player}: ${best.u.player} played ${pc(best.x.last)} of snaps last game (${r.player}: ${pc(current.x.last)}) and gets ${best.rzPerGame.toFixed(1)} red-zone chances per game (${r.player}: ${current.rzPerGame.toFixed(1)}).`;
+    r.alt = `Sheet's pick: ${r.player}`;
+    r.player = best.u.player;
+    r.status = best.status;
+    r.rz = `${best.rz} (${Math.round((best.u.rz_opp_share || 0) * 100)}%)`;
+    r.tds = best.x.tds;
+    r.first = firsts[r.team + "|" + best.u.player] || 0;
+  }
+  for (const t of D.top) {
+    const r = D.slate.find(s => s.team === t.Team);
+    if (r && r.adjust && r.player !== r.sheetPlayer) Object.assign(t, { Player: r.player, "RZ opps": r.rz, TDs: r.tds, "Team 1st TDs": r.first });
+  }
+}
+adjustPicks();
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const pct = v => v == null || v === "" ? "–" : Math.round(v * 100) + "%";
@@ -220,16 +270,19 @@ function seg(name, opts, cur) {
 }
 
 /* ---- Picks ---- */
+const changedCount = () => D.slate.filter(r => r.player !== r.sheetPlayer).length;
+const statusTag = r => r.status ? `<span class="flag bad">${esc(r.status)}</span>` : "";
+const changedTag = r => r.player !== r.sheetPlayer ? `<span class="flag">Changed</span>` : "";
 function viewPicks() {
   const days = ["All", ...new Set(D.slate.map(r => r.day))];
   const match = r => (state.pos === "All" || r.pick.startsWith(state.pos)) && (!state.star || r.pick.includes("★"));
   const shown = games.filter(g => (state.day === "All" || g[0].day === state.day) && g.some(match));
   let html = `<section class="stack" style="gap:10px"><div><h2>First TD picks, Week ${D.week}</h2>
-    <p class="hint">The player most likely to score each team's first touchdown of the game. Confidence is a ranking score from about six games per team, not a true probability. Injuries and inactives aren't checked, so confirm the player before betting.</p></div>
+    <p class="hint">The player most likely to score each team's first touchdown of the game. Confidence is a ranking score for the position from about six games per team, not a true probability. Players are checked against ESPN injury status${D.injuriesAt ? ` (${new Date(D.injuriesAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })})` : ""} and recent snap share. ${changedCount()} picks differ from your sheet. Check game-day inactives before betting.</p></div>
     <h3>Top plays</h3>
     <div class="tops">${D.top.map(t => `<button class="top-card" data-game="${esc(t.Team)}">
       <div class="l1"><span>${esc(t.Team)} ${esc(t.Matchup)}</span>${chip(t.Pick)}</div>
-      <div class="name">${esc(t.Player)}</div>
+      <div class="name">${esc(t.Player)} ${(() => { const r = D.slate.find(s => s.team === t.Team); return r ? changedTag(r) + statusTag(r) : ""; })()}</div>
       <div class="meter"><i style="width:${parseInt(t["Conf."])}%"></i></div>
       <div class="l3"><span><b>${esc(t["Conf."])}</b> conf</span><span><b>${esc(t["RZ opps"])}</b> RZ</span><span><b>${t.TDs}</b> TD</span><span><b>${t["Team 1st TDs"]}</b> team 1st</span></div>
     </button>`).join("")}</div></section>
@@ -254,7 +307,7 @@ function pickRow(r) {
   return `<button class="pr" data-open="${esc(r.team)}" aria-expanded="${open}">
     <span class="team">${esc(r.team)}<em>${esc(r.opp)}</em></span>
     <span class="pk">${chip(r.pick)}</span>
-    <span class="who">${esc(r.player)}</span>
+    <span class="who">${esc(r.player)} ${changedTag(r)}${statusTag(r)}</span>
     <span class="conf"><span>${esc(r.conf)}</span><span class="meter"><i style="width:${parseInt(r.conf)}%"></i></span></span>
     <span class="statline">
       <span class="num rz"><span class="lbl">RZ </span>${esc(r.rz)}</span>
@@ -263,7 +316,7 @@ function pickRow(r) {
       <span class="num gf ${gf >= 60 ? "pos" : gf <= 40 ? "neg" : ""}"><span class="lbl">Game 1st </span>${esc(r.gameFirst)}</span>
     </span>
     <span class="chev" aria-hidden="true">›</span>
-  </button>${open ? `<div class="detail">
+  </button>${r.adjust ? `<div class="adjust">${esc(r.adjust)}</div>` : ""}${open ? `<div class="detail">
     ${mixBar(`${r.team} 1st TDs, season`, r.teamPos)}
     ${mixBar(`${r.team} 1st TDs, ${r.opp.startsWith("@") ? "away" : "home"}`, r.venuePos)}
     ${mixBar("Opponent allows 1st TD to, season", r.oppPos)}
@@ -311,7 +364,7 @@ function panel(r, o) {
     <table class="mini"><thead><tr><th>Player</th><th>Season</th><th>In 20</th><th>In 10</th></tr></thead><tbody>
       <tr><td><b>${esc(t.top)}</b></td><td>${pct(t.share)}</td><td>${pct(t.rzShare)}</td><td>${pct(t.i10Share)}</td></tr>
       <tr><td>${esc(t.second)}</td><td>${pct(t.secondShare)}</td><td colspan="2"></td></tr>
-      <tr><td>1st TD pick: <b>${esc(r.player)}</b></td><td colspan="3">${esc(r.rz)} RZ · ${r.tds} TD</td></tr>
+      <tr><td>1st TD pick: <b>${esc(r.player)}</b> ${changedTag(r)}${statusTag(r)}</td><td colspan="3">${esc(r.rz)} RZ · ${r.tds} TD</td></tr>
     </tbody></table>
     <div class="sub">Red-zone run rate: <b>${pct(t.rzRun)}</b> (inside 10: ${pct(t.i10Run)}). ${esc(o.team)} faces ${pct(t.oppRzRun)}. NFL average 46%, inside 10 52%.</div>
   </section>`;
@@ -357,12 +410,12 @@ function defDetail(r) {
 /* ---- Players ---- */
 const firstCount = {};
 D.log.forEach(l => { if (l["Team 1st TD Scorer"]) { const k = l.Team + "|" + l["Team 1st TD Scorer"]; firstCount[k] = (firstCount[k] || 0) + 1; } });
-const PLY_COLS = [["player", "Player", "t"], ["team", "Team", "t"], ["pos", "Pos", "t"], ["first", "Team 1st TDs"], ["rz_opp_share", "RZ opp %", "p"], ["rz_targets", "RZ tgt"], ["rz_carries", "RZ car"],
+const PLY_COLS = [["player", "Player", "t"], ["team", "Team", "t"], ["pos", "Pos", "t"], ["status", "Injury", "t"], ["lastSnap", "Last game snaps", "p"], ["first", "Team 1st TDs"], ["rz_opp_share", "RZ opp %", "p"], ["rz_targets", "RZ tgt"], ["rz_carries", "RZ car"],
   ["i10_opp_share", "In-10 opp %", "p"], ["i10_targets", "In-10 tgt"], ["i10_carries", "In-10 car"], ["opp_share", "Opp %", "p"], ["targets", "Tgt"], ["carries", "Car"]];
 function plyFiltered() {
   const { q, team, pos, key, dir } = state.ply; const needle = q.trim().toLowerCase();
   const rows = D.usage.filter(u => (team === "All" || u.team === team) && (pos === "All" || u.pos === pos) && (!needle || u.player.toLowerCase().includes(needle)))
-    .map(u => ({ ...u, first: firstCount[u.team + "|" + u.player] || 0 }));
+    .map(u => ({ ...u, first: firstCount[u.team + "|" + u.player] || 0, status: injuryStatus(u.team, u.player), lastSnap: ((D.recent || {})[u.team] || {})[u.player]?.last }));
   rows.sort((a, b) => (typeof a[key] === "string" ? a[key].localeCompare(b[key]) : (a[key] || 0) - (b[key] || 0)) * dir);
   return rows;
 }
@@ -525,8 +578,19 @@ function parseWorkbook(buffer) {
   return data;
 }
 window.parseWorkbook = parseWorkbook;
-const signature = d => JSON.stringify([d.week, d.refreshed, d.log.length, d.slate.map(r => [r.team, r.pick, r.player, r.conf, r.gameFirst]),
-  d.allowed.map(r => [r.Team, r["TDs Allowed"]]), d.usage.map(r => [r.player, r.targets, r.carries])]);
+const signature = d => JSON.stringify([d.week, d.refreshed, d.log.length, d.slate.map(r => [r.team, r.pick, r.sheetPlayer || r.player, r.conf, r.gameFirst]),
+  d.allowed.map(r => [r.Team, r["TDs Allowed"]]), d.usage.map(r => [r.player, r.targets, r.carries]), Object.entries(d.injuries || {}).sort()]);
+function parseInjuries(json) { // Keep in step with injuries in build.py.
+  const latest = {};
+  for (const team of json.injuries || []) {
+    const abbr = Object.keys(D.nicks).find(a => (team.displayName || "").endsWith(D.nicks[a]));
+    for (const item of team.injuries || []) {
+      const key = `${abbr}|${normName(item.athlete.displayName)}`;
+      if (!latest[key] || (item.date || "") > latest[key][0]) latest[key] = [item.date || "", item.status];
+    }
+  }
+  return Object.fromEntries(Object.entries(latest).filter(([, v]) => ["Out", "Doubtful", "Questionable", "Injured Reserve", "Suspension"].includes(v[1])).map(([k, v]) => [k, v[1]]));
+}
 $("#update-btn").onclick = async () => {
   const btn = $("#update-btn"), status = $("#update-status");
   btn.disabled = true; status.textContent = "Updating…";
@@ -535,6 +599,11 @@ $("#update-btn").onclick = async () => {
     const resp = await fetch(EXPORT_URL);
     if (!resp.ok) throw new Error("Couldn't reach the sheet. Check that it's still shared by link, then try again.");
     const fresh = parseWorkbook(await resp.arrayBuffer());
+    fresh.recent = D.recent; fresh.injuries = D.injuries; fresh.injuriesAt = D.injuriesAt;
+    try {
+      const inj = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries");
+      if (inj.ok) { fresh.injuries = parseInjuries(await inj.json()); fresh.injuriesAt = new Date().toISOString(); }
+    } catch (e) { /* Keep the last injury report if ESPN is down. */ }
     if (signature(fresh) === signature(D)) { status.textContent = `Already current: Week ${D.week}`; return; }
     localStorage.setItem(SAVED_KEY, JSON.stringify(fresh));
     location.hash = state.tab;
