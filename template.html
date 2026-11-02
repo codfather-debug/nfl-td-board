@@ -171,54 +171,60 @@ try {
   const saved = JSON.parse(localStorage.getItem(SAVED_KEY));
   if (saved && refreshedAt(saved) >= refreshedAt(D)) {
     const newerInjuries = (saved.injuriesAt || "") > (D.injuriesAt || "") ? saved : D;
-    D = { ...saved, recent: D.recent, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
+    D = { ...saved, recent: D.recent, model: D.model, lines: newerInjuries.lines, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
   } else localStorage.removeItem(SAVED_KEY);
 } catch (e) { /* Storage is optional; the data built into the page still works. */ }
 
-/* ---- Player adjustment: positions stay the sheet's, only the player can change. ---- */
-const CHANGE_THRESHOLD = 1.25, MIN_SNAP_EDGE = 0.10;
+/* ---- Player scoring: model.json holds coefficients and held-out tier hit rates. ---- */
 const UNAVAILABLE = { "Out": "out", "Doubtful": "doubtful", "Injured Reserve": "on injured reserve", "Suspension": "suspended" };
+const LEAGUE_AVG_POINTS = 23;
 function normName(name) { // Keep in step with norm_name in build.py.
   return name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[.'’\-]/g, "")
     .trim().replace(/\s+(jr|sr|ii|iii|iv|v)$/, "").replace(/\s+/g, " ");
 }
 const injuryStatus = (team, player) => (D.injuries || {})[`${team}|${normName(player || "")}`] || "";
-function adjustPicks() {
+const sigmoid = x => 1 / (1 + Math.exp(-x));
+const predict = (c, f) => sigmoid(c.intercept + D.model.features.reduce((a, k) => a + c[k] * f[k], 0));
+const tierFor = (tiers, p) => tiers.reduce((best, t) => p >= t.min ? t : best, tiers[0]);
+const hasStarted = line => !!line && (line.final || Date.now() >= new Date(line.kickoff).getTime());
+function scorePlayers() {
   const firsts = {};
   D.log.forEach(l => { if (l["Team 1st TD Scorer"]) { const k = l.Team + "|" + l["Team 1st TD Scorer"]; firsts[k] = (firsts[k] || 0) + 1; } });
-  const hasRecent = Object.keys(D.recent || {}).length > 0;
-  for (const r of D.slate) {
-    r.sheetPlayer = r.player;
-    r.status = injuryStatus(r.team, r.player);
-    const pos = r.pick.split(" ")[0], recent = (D.recent || {})[r.team] || {};
-    const cands = D.usage.filter(u => u.team === r.team && u.pos === pos && recent[u.player]).map(u => {
-      const x = recent[u.player], rz = (u.rz_targets || 0) + (u.rz_carries || 0);
-      const perGame = x.gp ? (rz + 2 * x.tds + 3 * (firsts[r.team + "|" + u.player] || 0)) / x.gp : 0;
-      return { u, x, rz, status: injuryStatus(r.team, u.player), rzPerGame: x.gp ? rz / x.gp : 0, score: perGame * x.recent };
-    });
-    const avail = cands.filter(c => !UNAVAILABLE[c.status] && c.x.recent > 0).sort((a, b) => b.score - a.score);
-    const current = cands.find(c => c.u.player === r.player);
-    const out = UNAVAILABLE[r.status], best = avail[0];
-    if (!best || (!hasRecent && !out)) { if (out) r.adjust = `${r.player} is ${out}, and no clear replacement was found.`; continue; }
-    const beats = current && best.u.player !== r.player && best.score >= CHANGE_THRESHOLD * current.score
-      && best.x.last >= current.x.last + MIN_SNAP_EDGE && best.rzPerGame >= current.rzPerGame;
-    if (!out && !beats) continue;
-    const pc = v => Math.round(v * 100) + "%";
-    r.adjust = out ? `Changed from ${r.player}, who is ${out}.`
-      : `Changed from ${r.player}: ${best.u.player} played ${pc(best.x.last)} of snaps last game (${r.player}: ${pc(current.x.last)}) and gets ${best.rzPerGame.toFixed(1)} red-zone chances per game (${r.player}: ${current.rzPerGame.toFixed(1)}).`;
-    r.alt = `Sheet's pick: ${r.player}`;
-    r.player = best.u.player;
-    r.status = best.status;
-    r.rz = `${best.rz} (${Math.round((best.u.rz_opp_share || 0) * 100)}%)`;
-    r.tds = best.x.tds;
-    r.first = firsts[r.team + "|" + best.u.player] || 0;
+  const lines = D.lines || {}, rows = {};
+  D.slate.forEach(r => { rows[r.team] = r; });
+  D.players = [];
+  if (D.model) for (const u of D.usage) {
+    const slate = rows[u.team], x = ((D.recent || {})[u.team] || {})[u.player];
+    if (!slate || !x || x.gp < 2 || !["RB", "WR", "TE", "QB"].includes(u.pos)) continue;
+    const line = lines[u.team], imp = line ? line.imp : LEAGUE_AVG_POINTS;
+    const f = { oppg: ((u.targets || 0) + (u.carries || 0)) / x.gp, rzsh: u.rz_opp_share || 0, i10sh: u.i10_opp_share || 0, snaplast: x.lastPlayed || 0, imp,
+      isRB: +(u.pos === "RB"), isWR: +(u.pos === "WR"), isTE: +(u.pos === "TE"), isQB: +(u.pos === "QB") };
+    const status = injuryStatus(u.team, u.player), pAny = predict(D.model.any, f), pFirst = predict(D.model.first, f);
+    const firstTier = tierFor(D.model.firstTiers, pFirst), rz = (u.rz_targets || 0) + (u.rz_carries || 0);
+    D.players.push({ player: u.player, team: u.team, opp: slate.opp, pos: u.pos, day: slate.day, kick: slate.kick, imp, hasLine: !!line, started: hasStarted(line),
+      rzsh: f.rzsh, i10sh: f.i10sh, snap: x.last, missedLast: !x.last, status, unavailable: !!UNAVAILABLE[status] || !x.recent,
+      pAny, pFirst, anyRate: tierFor(D.model.anyTiers, pAny).hit, firstRate: firstTier.hit, gameRate: firstTier.game,
+      rz: `${rz} (${Math.round(f.rzsh * 100)}%)`, tds: x.tds, first: firsts[u.team + "|" + u.player] || 0 });
   }
-  for (const t of D.top) {
-    const r = D.slate.find(s => s.team === t.Team);
-    if (r && r.adjust && r.player !== r.sheetPlayer) Object.assign(t, { Player: r.player, "RZ opps": r.rz, TDs: r.tds, "Team 1st TDs": r.first });
+  D.players.sort((a, b) => b.pAny - a.pAny);
+  for (const r of D.slate) {
+    r.sheetPlayer = r.player; r.sheetGameFirst = r.gameFirst; r.pos = r.pick.split(" ")[0];
+    r.status = injuryStatus(r.team, r.player);
+    const line = lines[r.team];
+    r.imp = line ? line.imp : null; r.started = hasStarted(line);
+    if (line && D.model) { r.gameFirst = Math.round(sigmoid(D.model.gameFirstSlope * line.margin) * 100) + "%"; r.gameFirstVegas = true; }
+    const cands = D.players.filter(p => p.team === r.team && !p.unavailable).sort((a, b) => b.pFirst - a.pFirst);
+    if (!cands.length) continue;
+    const best = cands[0], sheet = D.players.find(p => p.team === r.team && p.player === r.player);
+    if (best.player !== r.player) {
+      const why = UNAVAILABLE[r.status] ? `${UNAVAILABLE[r.status]}` : sheet ? `${Math.round(sheet.rzsh * 100)}% of red-zone work vs. ${Math.round(best.rzsh * 100)}%` : "not in recent usage";
+      r.adjust = `Sheet's pick: ${r.player} (${why}).`;
+    }
+    Object.assign(r, { player: best.player, pos: best.pos, status: best.status, rz: best.rz, tds: best.tds, first: best.first, rzsh: best.rzsh,
+      firstRate: best.firstRate, gameRate: best.gameRate, pFirst: best.pFirst, missedLast: best.missedLast, alt: cands[1] ? `${cands[1].player} (${cands[1].pos}, ${cands[1].rz} red zone)` : "None" });
   }
 }
-adjustPicks();
+scorePlayers();
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const pct = v => v == null || v === "" ? "–" : Math.round(v * 100) + "%";
@@ -228,7 +234,7 @@ const nick = a => D.nicks[a] || a;
 const byTeam = (arr, key = "Team") => Object.fromEntries(arr.map(r => [r[key], r]));
 const allowed = byTeam(D.allowed), fScored = byTeam(D.firstScored), fAllowed = byTeam(D.firstAllowed);
 const tw = byTeam(D.thisWeek, "abbr");
-const state = { tab: "picks", day: "All", pos: "All", star: false, open: null, game: null,
+const state = { tab: "plays", day: "All", pos: "All", open: null, game: null, plays: { pos: "All", day: "All", started: false },
   def: { key: "TDs/G", dir: -1, open: null }, ply: { q: "", team: "All", pos: "All", key: "rz_opp_share", dir: -1 },
   log: { team: "All", week: "All", pos: "All", side: "team" } };
 
@@ -254,7 +260,7 @@ function mixBar(label, s) {
       `<span class="${p === "DEF/ST" ? "DST" : p}" style="width:${n / total * 100}%" title="${p} ${n}">${p === "DEF/ST" ? "D" : p} ${n}</span>`).join("")}</div></div>`;
 }
 
-const TABS = [["picks", "1st TD Picks"], ["matchups", "Matchups"], ["defenses", "TDs Allowed"], ["players", "Player Usage"], ["log", "1st TD Log"]];
+const TABS = [["plays", "Top TD Plays"], ["picks", "1st TD Picks"], ["matchups", "Matchups"], ["defenses", "TDs Allowed"], ["players", "Player Usage"], ["log", "1st TD Log"]];
 function go(tab, extra) {
   state.tab = tab; Object.assign(state, extra || {});
   render(); scrollTo(0, 0);
@@ -269,29 +275,66 @@ function seg(name, opts, cur) {
     `<button data-seg="${name}" data-val="${esc(o)}" aria-pressed="${String(o) === String(cur)}">${esc(o)}</button>`).join("")}</div>`;
 }
 
-/* ---- Picks ---- */
+/* ---- Shared tags ---- */
+const pctText = v => v == null ? "–" : Math.round(v * 100) + "%";
+const statusTag = r => (r.status ? `<span class="flag bad">${esc(r.status)}</span>` : "") + (r.missedLast && !r.started ? `<span class="flag bad">Missed last game</span>` : "");
 const changedCount = () => D.slate.filter(r => r.player !== r.sheetPlayer).length;
-const statusTag = r => r.status ? `<span class="flag bad">${esc(r.status)}</span>` : "";
-const changedTag = r => r.player !== r.sheetPlayer ? `<span class="flag">Changed</span>` : "";
+const changedTag = r => r.player !== r.sheetPlayer ? `<span class="flag">Differs from sheet</span>` : "";
+const startedTag = r => r.started ? `<span class="flag">Started</span>` : "";
+const injuriesWhen = () => D.injuriesAt ? ` (${new Date(D.injuriesAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })})` : "";
+
+/* ---- Top TD Plays ---- */
+function viewPlays() {
+  const s = state.plays, days = ["All", ...new Set(D.slate.map(r => r.day))];
+  if (!D.players.length) return `<div><h2>Top TD plays, Week ${D.week}</h2><p class="hint">Player data couldn't be loaded, so this page is empty for now. Select Update data/matchups or check back after the next daily refresh.</p></div>`;
+  const hiddenStarted = D.players.filter(p => p.started && !p.unavailable).length;
+  const list = D.players.filter(p => !p.unavailable && (s.started || !p.started) && (s.pos === "All" || p.pos === s.pos) && (s.day === "All" || p.day === s.day)).slice(0, 40);
+  let html = `<div><h2>Top TD plays, Week ${D.week}</h2>
+    <p class="hint">Every player ranked by chance to score any touchdown, using red-zone share, inside-the-10 share, touches, snaps and projected team points. Each tier shows how often similar players scored when tested on a season the model didn't train on. Injuries checked${injuriesWhen()}. Check game-day inactives before betting.</p></div>
+    <div class="filters">${seg("playday", days, s.day)}${seg("playpos", ["All", ...POS], s.pos)}
+      <div class="seg"><button data-playstarted aria-pressed="${s.started}">Include started games</button></div></div>
+    <div>
+    <div class="pr head"><span>Team</span><span>Pos</span><span>Player</span><span>Any TD</span><span class="num">RZ share</span><span class="num">In 10</span><span class="num">Team pts</span><span class="num">Snaps</span><span></span></div>`;
+  let last = null;
+  for (const p of list) {
+    if (pctText(p.anyRate) !== last) { html += `<div class="kick" style="margin-top:${last === null ? 0 : 14}px"><h3>About ${pctText(p.anyRate)} score a TD</h3></div>`; last = pctText(p.anyRate); }
+    html += `<div class="game"><button class="pr" data-game="${esc(p.team)}">
+      <span class="team">${esc(p.team)}<em>${esc(p.opp)}</em></span>
+      <span class="pk"><span class="chip ${esc(p.pos)}">${esc(p.pos)}</span></span>
+      <span class="who">${esc(p.player)} ${statusTag(p)}${startedTag(p)}</span>
+      <span class="conf"><span>${pctText(p.anyRate)}</span><span class="meter"><i style="width:${p.anyRate * 100}%"></i></span></span>
+      <span class="statline">
+        <span class="num rz"><span class="lbl">RZ share </span>${pctText(p.rzsh)}</span>
+        <span class="num td"><span class="lbl">In 10 </span>${pctText(p.i10sh)}</span>
+        <span class="num fst"><span class="lbl">Team pts </span>${p.hasLine ? p.imp.toFixed(1) : "–"}</span>
+        <span class="num gf"><span class="lbl">Snaps </span>${pctText(p.snap)}</span>
+      </span>
+      <span class="chev" aria-hidden="true">›</span></button></div>`;
+  }
+  if (!list.length) html += `<div class="empty">${hiddenStarted && !s.started ? "No upcoming games match. Select Include started games to see them." : "No players match these filters."}</div>`;
+  return html + "</div>";
+}
+
+/* ---- 1st TD Picks ---- */
 function viewPicks() {
   const days = ["All", ...new Set(D.slate.map(r => r.day))];
-  const match = r => (state.pos === "All" || r.pick.startsWith(state.pos)) && (!state.star || r.pick.includes("★"));
+  const match = r => state.pos === "All" || r.pos === state.pos;
   const shown = games.filter(g => (state.day === "All" || g[0].day === state.day) && g.some(match));
+  const top = [...D.slate].filter(r => r.pFirst != null && !r.started).sort((a, b) => b.pFirst - a.pFirst).slice(0, 8);
   let html = `<section class="stack" style="gap:10px"><div><h2>First TD picks, Week ${D.week}</h2>
-    <p class="hint">The player most likely to score each team's first touchdown of the game. Confidence is a ranking score for the position from about six games per team, not a true probability. Players are checked against ESPN injury status${D.injuriesAt ? ` (${new Date(D.injuriesAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })})` : ""} and recent snap share. ${changedCount()} picks differ from your sheet. Check game-day inactives before betting.</p></div>
-    <h3>Top plays</h3>
-    <div class="tops">${D.top.map(t => `<button class="top-card" data-game="${esc(t.Team)}">
-      <div class="l1"><span>${esc(t.Team)} ${esc(t.Matchup)}</span>${chip(t.Pick)}</div>
-      <div class="name">${esc(t.Player)} ${(() => { const r = D.slate.find(s => s.team === t.Team); return r ? changedTag(r) + statusTag(r) : ""; })()}</div>
-      <div class="meter"><i style="width:${parseInt(t["Conf."])}%"></i></div>
-      <div class="l3"><span><b>${esc(t["Conf."])}</b> conf</span><span><b>${esc(t["RZ opps"])}</b> RZ</span><span><b>${t.TDs}</b> TD</span><span><b>${t["Team 1st TDs"]}</b> team 1st</span></div>
-    </button>`).join("")}</div></section>
+    <p class="hint">The player on each team most likely to score that team's first touchdown, ranked on the player's own role, not a position pick. Rates show how often similar players did it when tested on a season the model didn't train on. Even the best plays land less than half the time. ${changedCount()} picks differ from your sheet. Injuries checked${injuriesWhen()}. Check game-day inactives before betting.</p></div>
+    ${top.length ? `<h3>Best first TD plays still to come</h3>
+    <div class="tops">${top.map(t => `<button class="top-card" data-game="${esc(t.team)}">
+      <div class="l1"><span>${esc(t.team)} ${esc(t.opp)}</span><span class="chip ${esc(t.pos)}">${esc(t.pos)}</span></div>
+      <div class="name">${esc(t.player)} ${statusTag(t)}</div>
+      <div class="meter"><i style="width:${(t.firstRate || 0) * 100}%"></i></div>
+      <div class="l3"><span><b>${pctText(t.firstRate)}</b> team's 1st</span><span><b>${pctText(t.gameRate)}</b> game's 1st</span><span><b>${esc(t.rz)}</b> RZ</span></div>
+    </button>`).join("")}</div>` : ""}</section>
   <section><div class="stack" style="gap:10px">
     <h3>Every team this week</h3>
-    <div class="filters">${seg("day", days, state.day)}${seg("pos", ["All", ...POS], state.pos)}
-      <div class="seg"><button data-star aria-pressed="${state.star}">★ only</button></div></div>
+    <div class="filters">${seg("day", days, state.day)}${seg("pos", ["All", ...POS], state.pos)}</div>
     <div>
-    <div class="pr head"><span>Team</span><span>Pick</span><span>Player</span><span>Conf.</span><span class="num">RZ opps</span><span class="num">TDs</span><span class="num">Team 1st</span><span class="num">Game 1st</span><span></span></div>`;
+    <div class="pr head"><span>Team</span><span>Pos</span><span>Player</span><span>Team's 1st TD</span><span class="num">RZ opps</span><span class="num">TDs</span><span class="num">Team pts</span><span class="num">Scores 1st</span><span></span></div>`;
   let lastKick = "";
   for (const g of shown) {
     const k = `${g[0].day} ${g[0].kick}`;
@@ -306,14 +349,14 @@ function pickRow(r) {
   const gf = parseInt(r.gameFirst);
   return `<button class="pr" data-open="${esc(r.team)}" aria-expanded="${open}">
     <span class="team">${esc(r.team)}<em>${esc(r.opp)}</em></span>
-    <span class="pk">${chip(r.pick)}</span>
-    <span class="who">${esc(r.player)} ${changedTag(r)}${statusTag(r)}</span>
-    <span class="conf"><span>${esc(r.conf)}</span><span class="meter"><i style="width:${parseInt(r.conf)}%"></i></span></span>
+    <span class="pk"><span class="chip ${esc(r.pos)}">${esc(r.pos)}</span></span>
+    <span class="who">${esc(r.player)} ${statusTag(r)}${changedTag(r)}${startedTag(r)}</span>
+    <span class="conf"><span>${pctText(r.firstRate)}</span><span class="meter"><i style="width:${(r.firstRate || 0) * 100}%"></i></span></span>
     <span class="statline">
       <span class="num rz"><span class="lbl">RZ </span>${esc(r.rz)}</span>
       <span class="num td"><span class="lbl">TDs </span>${r.tds}</span>
-      <span class="num fst"><span class="lbl">Team 1st </span>${r.first}</span>
-      <span class="num gf ${gf >= 60 ? "pos" : gf <= 40 ? "neg" : ""}"><span class="lbl">Game 1st </span>${esc(r.gameFirst)}</span>
+      <span class="num fst"><span class="lbl">Team pts </span>${r.imp == null ? "–" : r.imp.toFixed(1)}</span>
+      <span class="num gf ${gf >= 60 ? "pos" : gf <= 40 ? "neg" : ""}"><span class="lbl">Scores 1st </span>${esc(r.gameFirst)}</span>
     </span>
     <span class="chev" aria-hidden="true">›</span>
   </button>${r.adjust ? `<div class="adjust">${esc(r.adjust)}</div>` : ""}${open ? `<div class="detail">
@@ -321,7 +364,8 @@ function pickRow(r) {
     ${mixBar(`${r.team} 1st TDs, ${r.opp.startsWith("@") ? "away" : "home"}`, r.venuePos)}
     ${mixBar("Opponent allows 1st TD to, season", r.oppPos)}
     ${mixBar("Opponent allows, at this venue", r.oppVenue)}
-    <div class="full"><span><b>Alt:</b> ${esc(r.alt)}</span>
+    <div class="full"><span><b>Next option:</b> ${esc(r.alt)}</span>
+      <span><b>Chance of game's 1st TD:</b> ${pctText(r.gameRate)}</span>
       <span class="${r.noTd >= 2 ? "neg" : ""}"><b>No-TD games:</b> ${r.noTd}</span>
       <button class="link" data-game="${esc(r.team)}">Open matchup</button></div>
   </div>` : ""}`;
@@ -337,6 +381,7 @@ function viewMatchups() {
     <select id="game-pick">${games.map(x => `<option value="${esc(x[0].team)}" ${x === g ? "selected" : ""}>${esc(x[0].day)} ${esc(x[0].kick)}: ${esc(nick(x[0].opp.startsWith("@") ? x[0].team : x[1].team))} @ ${esc(nick(x[0].opp.startsWith("@") ? x[1].team : x[0].team))}</option>`).join("")}</select></div>
   <section class="panel" style="gap:8px">
     <h3>First TD of the game: which team</h3>
+    <div class="sub">${away.gameFirstVegas ? "From the Vegas spread." : "From each team's first TD record; no betting line yet."}</div>
     <div class="splitbar"><span class="a" style="width:${parseInt(away.gameFirst)}%">${esc(away.team)} ${esc(away.gameFirst)}</span><span class="b" style="width:${parseInt(home.gameFirst)}%">${esc(home.team)} ${esc(home.gameFirst)}</span></div>
   </section>
   <div class="vs">${panel(away, home)}${panel(home, away)}</div>`;
@@ -349,8 +394,7 @@ function panel(r, o) {
   const t = tw[r.team] || {};
   const gpO = (fScored[r.team] || {}).GP, gpD = (fAllowed[o.team] || {}).GP;
   return `<section class="panel">
-    <div class="panel-head"><div><h2>${esc(nick(r.team))} offense</h2><div class="sub">vs ${esc(nick(o.team))} defense · ${gpO} and ${gpD} games</div></div>
-      <div style="display:flex;gap:6px;align-items:center"><span class="sub">1st TD</span>${chip(r.pick)}${t.lean ? `<span class="sub">Any TD</span>${chip(t.pick || t.lean)}` : ""}</div></div>
+    <div class="panel-head"><div><h2>${esc(nick(r.team))} offense</h2><div class="sub">vs ${esc(nick(o.team))} defense · ${gpO} and ${gpD} games${r.imp == null ? "" : ` · projected ${r.imp.toFixed(1)} points`}</div></div></div>
     <h3>All TDs by position, season</h3>
     <div class="bars">${POS.map(p => `<div class="bar-row"><span class="chip ${p}">${p}</span><div class="bar-pair">
         <div class="bar o"><i style="width:${w(tot(off[p]))}%"></i>${tot(off[p])}</div>
@@ -360,11 +404,9 @@ function panel(r, o) {
     <div class="key"><span><i style="background:var(--accent)"></i>${esc(r.team)} rush + rec TDs</span><span><i style="background:var(--muted)"></i>${esc(o.team)} allowed</span><span>Dashed line: NFL average</span></div>
     <h3>First TDs by position, season</h3>
     <div class="mixes">${mixBar(`${r.team} 1st TDs`, r.teamPos)}${mixBar(`${o.team} allows 1st TD`, r.oppPos)}</div>
-    <h3>Key players, share of team usage</h3>
-    <table class="mini"><thead><tr><th>Player</th><th>Season</th><th>In 20</th><th>In 10</th></tr></thead><tbody>
-      <tr><td><b>${esc(t.top)}</b></td><td>${pct(t.share)}</td><td>${pct(t.rzShare)}</td><td>${pct(t.i10Share)}</td></tr>
-      <tr><td>${esc(t.second)}</td><td>${pct(t.secondShare)}</td><td colspan="2"></td></tr>
-      <tr><td>1st TD pick: <b>${esc(r.player)}</b> ${changedTag(r)}${statusTag(r)}</td><td colspan="3">${esc(r.rz)} RZ · ${r.tds} TD</td></tr>
+    <h3>Best TD plays on this team</h3>
+    <table class="mini"><thead><tr><th>Player</th><th>Any TD</th><th>Team's 1st</th><th>RZ share</th><th>In 10</th></tr></thead><tbody>
+      ${D.players.filter(p => p.team === r.team && !p.unavailable).slice(0, 4).map(p => `<tr><td><b>${esc(p.player)}</b> <span class="chip ${esc(p.pos)}">${esc(p.pos)}</span> ${statusTag(p)}</td><td>${pctText(p.anyRate)}</td><td>${pctText(p.firstRate)}</td><td>${pctText(p.rzsh)}</td><td>${pctText(p.i10sh)}</td></tr>`).join("")}
     </tbody></table>
     <div class="sub">Red-zone run rate: <b>${pct(t.rzRun)}</b> (inside 10: ${pct(t.i10Run)}). ${esc(o.team)} faces ${pct(t.oppRzRun)}. NFL average 46%, inside 10 52%.</div>
   </section>`;
@@ -379,7 +421,7 @@ function viewDefenses() {
   const { key, dir } = state.def;
   rows.sort((a, b) => (typeof a[key] === "string" ? String(a[key]).localeCompare(b[key]) : (a[key] ?? -1) - (b[key] ?? -1)) * dir);
   const heat = {}; DEF_COLS.forEach(([k, , f]) => { if (f === 2 || f === "p") heat[k] = Math.max(...rows.map(r => r[k] || 0)); });
-  return `<div><h2>TDs allowed by defense</h2><p class="hint">All touchdowns each defense has allowed this season, per game, except the last column, which is how often it allowed the game's first TD. Darker cells give up more. Select a team to see the players it faces this week, or sort by any column.</p></div>
+  return `<div><h2>TDs allowed by defense</h2><p class="hint">All touchdowns each defense has allowed this season, per game, except the last column, which is how often it allowed the game's first TD. Darker cells give up more. Use this as context: in testing it added almost nothing once player role and projected team points were known. Select a team to see the players it faces this week, or sort by any column.</p></div>
   <div class="tablebox"><table class="data"><thead><tr>${DEF_COLS.map(([k, l, f]) =>
     `<th class="${f === "t" ? "t" : ""}" aria-sort="${key === k ? (dir > 0 ? "ascending" : "descending") : "none"}"><button data-defsort="${esc(k)}">${esc(l)}</button></th>`).join("")}</tr></thead>
   <tbody>${rows.map(r => {
@@ -408,14 +450,15 @@ function defDetail(r) {
 }
 
 /* ---- Players ---- */
+const playerLookup = Object.fromEntries(D.players.map(p => [p.team + "|" + p.player, p]));
 const firstCount = {};
 D.log.forEach(l => { if (l["Team 1st TD Scorer"]) { const k = l.Team + "|" + l["Team 1st TD Scorer"]; firstCount[k] = (firstCount[k] || 0) + 1; } });
-const PLY_COLS = [["player", "Player", "t"], ["team", "Team", "t"], ["pos", "Pos", "t"], ["status", "Injury", "t"], ["lastSnap", "Last game snaps", "p"], ["first", "Team 1st TDs"], ["rz_opp_share", "RZ opp %", "p"], ["rz_targets", "RZ tgt"], ["rz_carries", "RZ car"],
+const PLY_COLS = [["player", "Player", "t"], ["team", "Team", "t"], ["pos", "Pos", "t"], ["estAny", "Any TD est.", "p"], ["status", "Injury", "t"], ["lastSnap", "Last game snaps", "p"], ["first", "Team 1st TDs"], ["rz_opp_share", "RZ opp %", "p"], ["rz_targets", "RZ tgt"], ["rz_carries", "RZ car"],
   ["i10_opp_share", "In-10 opp %", "p"], ["i10_targets", "In-10 tgt"], ["i10_carries", "In-10 car"], ["opp_share", "Opp %", "p"], ["targets", "Tgt"], ["carries", "Car"]];
 function plyFiltered() {
   const { q, team, pos, key, dir } = state.ply; const needle = q.trim().toLowerCase();
   const rows = D.usage.filter(u => (team === "All" || u.team === team) && (pos === "All" || u.pos === pos) && (!needle || u.player.toLowerCase().includes(needle)))
-    .map(u => ({ ...u, first: firstCount[u.team + "|" + u.player] || 0, status: injuryStatus(u.team, u.player), lastSnap: ((D.recent || {})[u.team] || {})[u.player]?.last }));
+    .map(u => ({ ...u, first: firstCount[u.team + "|" + u.player] || 0, estAny: playerLookup[u.team + "|" + u.player]?.anyRate, status: injuryStatus(u.team, u.player), lastSnap: ((D.recent || {})[u.team] || {})[u.player]?.last }));
   rows.sort((a, b) => (typeof a[key] === "string" ? a[key].localeCompare(b[key]) : (a[key] || 0) - (b[key] || 0)) * dir);
   return rows;
 }
@@ -458,7 +501,7 @@ function viewLog() {
 
 function render() {
   renderTabs();
-  $("#view").innerHTML = { picks: viewPicks, matchups: viewMatchups, defenses: viewDefenses, players: viewPlayers, log: viewLog }[state.tab]();
+  $("#view").innerHTML = { plays: viewPlays, picks: viewPicks, matchups: viewMatchups, defenses: viewDefenses, players: viewPlayers, log: viewLog }[state.tab]();
   if (state.tab === "players") fillPlayers();
 }
 
@@ -467,10 +510,11 @@ $("#view").addEventListener("click", e => {
   const d = b.dataset;
   if (d.game) return go("matchups", { game: d.game });
   if (d.open) { state.open = state.open === d.open ? null : d.open; return render(); }
-  if ("star" in d) { state.star = !state.star; return render(); }
+  if ("playstarted" in d) { state.plays.started = !state.plays.started; return render(); }
   if (d.seg) {
     const v = d.val;
     if (d.seg === "day") state.day = v; else if (d.seg === "pos") state.pos = v;
+    else if (d.seg === "playpos") state.plays.pos = v; else if (d.seg === "playday") state.plays.day = v;
     else if (d.seg === "plypos") state.ply.pos = v; else if (d.seg === "logpos") state.log.pos = v;
     else if (d.seg === "logside") state.log.side = v === "Scored" ? "team" : "allowed";
     return render();
@@ -577,9 +621,20 @@ function parseWorkbook(buffer) {
   if (bad) throw new Error("The sheet looks incomplete right now, so nothing was changed.");
   return data;
 }
-window.parseWorkbook = parseWorkbook;
-const signature = d => JSON.stringify([d.week, d.refreshed, d.log.length, d.slate.map(r => [r.team, r.pick, r.sheetPlayer || r.player, r.conf, r.gameFirst]),
-  d.allowed.map(r => [r.Team, r["TDs Allowed"]]), d.usage.map(r => [r.player, r.targets, r.carries]), Object.entries(d.injuries || {}).sort()]);
+window.parseWorkbook = parseWorkbook; window.parseLines = parseLines;
+const signature = d => JSON.stringify([d.week, d.refreshed, d.log.length, d.slate.map(r => [r.team, r.pick, r.sheetPlayer || r.player, r.conf, r.sheetGameFirst || r.gameFirst]),
+  d.allowed.map(r => [r.Team, r["TDs Allowed"]]), d.usage.map(r => [r.player, r.targets, r.carries]), Object.entries(d.injuries || {}).sort(), Object.entries(d.lines || {}).map(([k, v]) => [k, v.imp, v.total, v.final]).sort()]);
+function parseLines(text, week) { // Keep in step with game_lines in build.py.
+  const wb = XLSX.read(text, { type: "string", raw: true }), out = {};
+  for (const g of XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" })) {
+    if (String(g.season) !== "2026" || String(g.week) !== String(week) || g.spread_line === "" || g.total_line === "") continue;
+    const spread = +g.spread_line, total = +g.total_line;
+    const info = { total, kickoff: `${g.gameday}T${g.gametime}:00-05:00`, final: g.result !== "" };
+    out[g.home_team] = { ...info, margin: spread, imp: (total + spread) / 2 };
+    out[g.away_team] = { ...info, margin: -spread, imp: (total - spread) / 2 };
+  }
+  return out;
+}
 function parseInjuries(json) { // Keep in step with injuries in build.py.
   const latest = {};
   for (const team of json.injuries || []) {
@@ -599,11 +654,15 @@ $("#update-btn").onclick = async () => {
     const resp = await fetch(EXPORT_URL);
     if (!resp.ok) throw new Error("Couldn't reach the sheet. Check that it's still shared by link, then try again.");
     const fresh = parseWorkbook(await resp.arrayBuffer());
-    fresh.recent = D.recent; fresh.injuries = D.injuries; fresh.injuriesAt = D.injuriesAt;
+    fresh.recent = D.recent; fresh.model = D.model; fresh.lines = D.lines; fresh.injuries = D.injuries; fresh.injuriesAt = D.injuriesAt;
     try {
       const inj = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries");
       if (inj.ok) { fresh.injuries = parseInjuries(await inj.json()); fresh.injuriesAt = new Date().toISOString(); }
     } catch (e) { /* Keep the last injury report if ESPN is down. */ }
+    try {
+      const lines = await fetch("https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv");
+      if (lines.ok) { const parsed = parseLines(await lines.text(), fresh.week); if (Object.keys(parsed).length) fresh.lines = parsed; }
+    } catch (e) { /* Keep the last lines if the source is down. */ }
     if (signature(fresh) === signature(D)) { status.textContent = `Already current: Week ${D.week}`; return; }
     localStorage.setItem(SAVED_KEY, JSON.stringify(fresh));
     location.hash = state.tab;

@@ -25,6 +25,7 @@ EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=x
 NFLVERSE = "https://github.com/nflverse/nflverse-data/releases/download"
 SNAPS_URL = f"{NFLVERSE}/snap_counts/snap_counts_2026.csv"
 STATS_URL = f"{NFLVERSE}/stats_player/stats_player_week_2026.csv"
+LINES_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
 INJURIES_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries"
 RECENT_WEIGHTS = (0.6, 0.25, 0.15)  # Team's last game first.
 WATCHED_STATUSES = {"Out", "Doubtful", "Questionable", "Injured Reserve", "Suspension"}
@@ -52,8 +53,37 @@ def norm_name(name):
     return re.sub(r"\s+", " ", name)
 
 
-def recent_usage(usage):
-    """Games played, recent snap share and TDs for each player in the usage tab."""
+def game_lines(week):
+    """Projected points and kickoff by team. Keep in step with parseLines in template.html.
+
+    spread_line is positive when the home team is favored.
+    """
+    out = {}
+    for g in fetch_csv(LINES_URL):
+        if g["season"] != "2026" or g["week"] != str(week) or not g["spread_line"] or not g["total_line"]:
+            continue
+        spread, total = float(g["spread_line"]), float(g["total_line"])
+        info = {"total": total, "kickoff": f"{g['gameday']}T{g['gametime']}:00-05:00", "final": bool(g["result"])}
+        out[g["home_team"]] = {**info, "margin": spread, "imp": (total + spread) / 2}
+        out[g["away_team"]] = {**info, "margin": -spread, "imp": (total - spread) / 2}
+    return out
+
+
+def counted_games(refreshed):
+    """(team, week) of games played before the sheet's refresh, which its usage totals include."""
+    cutoff = datetime.datetime.strptime(refreshed.split(",")[0], "%m/%d/%Y").date().isoformat()
+    out = set()
+    for g in fetch_csv(LINES_URL):
+        if g["season"] == "2026" and g["game_type"] == "REG" and g["gameday"] < cutoff:
+            out |= {(g["home_team"], int(g["week"])), (g["away_team"], int(g["week"]))}
+    return out
+
+
+def recent_usage(usage, counted):
+    """Games played, recent snap share and TDs for each player in the usage tab.
+
+    Games and TDs cover the same games as the sheet's usage totals, so per-game rates are right.
+    """
     snaps = [r for r in fetch_csv(SNAPS_URL) if r["game_type"] == "REG"]
     stats = [r for r in fetch_csv(STATS_URL) if r["season_type"] == "REG"]
     by_player = collections.defaultdict(dict)
@@ -67,6 +97,8 @@ def recent_usage(usage):
         positions[key] = r["position"]
     tds = collections.Counter()
     for r in stats:
+        if (r["team"], int(r["week"])) not in counted:
+            continue
         tds[(r["team"], norm_name(r["player_display_name"]))] += int(
             float(r["rushing_tds"] or 0) + float(r["receiving_tds"] or 0))
 
@@ -84,9 +116,11 @@ def recent_usage(usage):
         weeks = sorted(team_weeks[team])
         last = [by_player[key].get(w, 0) for w in reversed(weeks[-len(RECENT_WEIGHTS):])]
         weights = RECENT_WEIGHTS[: len(last)]
+        played = sorted(w for w, v in by_player[key].items() if v > 0)
         out[team][u["player"]] = {
-            "gp": sum(1 for v in by_player[key].values() if v > 0),
+            "gp": sum(1 for w in played if (team, w) in counted),
             "last": last[0] if last else 0,
+            "lastPlayed": by_player[key][played[-1]] if played else 0,
             "recent": round(sum(a * b for a, b in zip(weights, last)) / sum(weights), 3) if last else 0,
             "tds": tds[(team, name)],
         }
@@ -254,7 +288,7 @@ def main(path):
     validate(data)
     # These sources are extras: if one is down, the page falls back to the sheet's picks.
     try:
-        data["recent"] = recent_usage(usage)
+        data["recent"] = recent_usage(usage, counted_games(refreshed))
     except Exception as e:
         print(f"Snap data unavailable: {e}")
         data["recent"] = {}
@@ -264,6 +298,13 @@ def main(path):
     except Exception as e:
         print(f"Injury data unavailable: {e}")
         data["injuries"], data["injuriesAt"] = {}, ""
+    try:
+        data["lines"] = game_lines(week)
+    except Exception as e:
+        print(f"Betting lines unavailable: {e}")
+        data["lines"] = {}
+    with open(os.path.join(HERE, "model", "model.json"), encoding="utf-8") as f:
+        data["model"] = json.load(f)
     payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/")
     with open(os.path.join(HERE, "template.html"), encoding="utf-8") as f:
         html = f.read()
