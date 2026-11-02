@@ -34,6 +34,12 @@ header.top { background: var(--band); color: var(--band-fg); padding-block: 16px
 .brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
 h1 { font: 700 34px/1 var(--display); letter-spacing: .01em; margin: 0; text-transform: uppercase; }
 .brand small { color: var(--band-muted); font-size: 13px; }
+.updater { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px; }
+#update-status { color: var(--band-muted); font-size: 13px; }
+#update-btn { background: var(--band-fg); color: var(--band); border: 0; border-radius: 5px; cursor: pointer; font: 700 15px/1 var(--display); letter-spacing: .03em; padding: 8px 11px; text-transform: uppercase; white-space: nowrap; }
+#update-btn:hover { opacity: .88; }
+#update-btn:disabled { cursor: wait; opacity: .6; }
+#update-btn:focus-visible { outline-color: var(--band-fg); }
 nav.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--band); border-bottom: 1px solid var(--line); }
 .tabrow { display: flex; gap: 2px; overflow-x: auto; padding-top: 8px; }
 .tabrow button { flex: none; background: none; border: 0; color: var(--band-muted); cursor: pointer; font: 600 18px/1 var(--display); letter-spacing: .03em; padding: 10px 14px 11px; text-transform: uppercase; border-radius: 4px 4px 0 0; }
@@ -149,12 +155,20 @@ table.data td.extra { white-space: normal; background: var(--sunken); text-align
 <header class="top gutter"><div class="wrap brand">
   <h1>First TD Board</h1>
   <small id="stamp"></small>
+  <div class="updater"><span id="update-status" role="status"></span><button id="update-btn" type="button">Update data/matchups</button></div>
 </div></header>
 <nav class="tabs gutter" aria-label="Views"><div class="wrap tabrow" id="tabs" role="tablist"></div></nav>
 <main class="gutter"><div class="wrap stack" id="view"></div></main>
 
 <script>
-const D = /*__DATA__*/null;
+let D = /*__DATA__*/null;
+const SAVED_KEY = "first-td-board-data";
+const refreshedAt = d => new Date(d.refreshed).getTime() || 0;
+try {
+  const saved = JSON.parse(localStorage.getItem(SAVED_KEY));
+  if (saved && refreshedAt(saved) >= refreshedAt(D)) D = saved;
+  else localStorage.removeItem(SAVED_KEY);
+} catch (e) { /* Storage is optional; the data built into the page still works. */ }
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const pct = v => v == null || v === "" ? "–" : Math.round(v * 100) + "%";
@@ -420,7 +434,111 @@ $("#view").addEventListener("change", e => {
 });
 $("#view").addEventListener("input", e => { if (e.target.id === "ply-q") { state.ply.q = e.target.value; fillPlayers(); } });
 
-$("#stamp").textContent = `2026 season · Week ${D.week} · sheet data refreshed ${D.refreshed.split(",")[0]} · kickoffs in Central Time`;
+/* ---- Update from the sheet. Keep this parser in step with build.py. ---- */
+const EXPORT_URL = "https://docs.google.com/spreadsheets/d/1fwtkoY2KveC6TJPRyn0pvHPseVw2_4j2Qbud1x0q1pU/export?format=xlsx";
+const XLSX_URL = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = XLSX_URL; s.onload = ok; s.onerror = () => fail(new Error("Couldn't load the spreadsheet reader."));
+    document.head.append(s);
+  });
+}
+function parseWorkbook(buffer) {
+  const wb = XLSX.read(buffer, { type: "array" });
+  const clean = v => typeof v === "number" ? (Number.isInteger(v) ? v : Math.round(v * 1000) / 1000)
+    : typeof v === "string" ? v.trim() : v ?? null;
+  const rows = name => {
+    if (!wb.Sheets[name]) throw new Error(`The sheet has no "${name}" tab.`);
+    return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null, blankrows: true }).map(r => r.map(clean));
+  };
+  const zip = (keys, vals) => Object.fromEntries(keys.map((k, i) => [k, vals[i] ?? null]).filter(([k]) => k));
+  const table = name => {
+    const [head, ...rest] = rows(name);
+    return rest.filter(r => r[0] !== null && r[0] !== "").map(r => zip(head, r));
+  };
+  const headerAt = (all, first) => all.findIndex(r => r[0] === first);
+  const timeText = v => {
+    if (typeof v !== "number") return v;
+    const m = Math.round(v * 1440), h = Math.floor(m / 60);
+    return `${h % 12 || 12}:${String(m % 60).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+  };
+
+  const picks = rows("1st TD Picks");
+  const topAt = headerAt(picks, "#"), top = [];
+  for (const r of picks.slice(topAt + 1)) { if (!Number.isInteger(r[0])) break; top.push(zip(picks[topAt], r)); }
+  const slateKeys = ["day", "kick", "team", "opp", "teamPos", "venuePos", "oppPos", "oppVenue", "pick", "conf", "player", "rz", "tds", "first", "alt", "gameFirst", "noTd"];
+  const slate = []; let day = null, kick = null;
+  for (const r of picks.slice(headerAt(picks, "Day") + 1)) {
+    if (!r[2]) continue;
+    day = r[0] || day; kick = r[1] || kick;
+    slate.push(zip(slateKeys, [day, kick, ...r.slice(2)]));
+  }
+  const weekMatch = /WEEK (\d+)/.exec(picks[0][0] || "");
+  if (!weekMatch) throw new Error("The 1st TD Picks tab has no week in its title.");
+
+  const off = {}, dfn = {}, nickToAbbr = {}; let refreshed = "";
+  const add = (bucket, team, pos, ru, re, pa) => {
+    const t = (bucket[team] ??= {})[pos] ??= [0, 0, 0];
+    t[0] += ru; t[1] += re; t[2] += pa;
+  };
+  for (const r of rows("POS DATA")) {
+    for (const c of r) if (typeof c === "string" && c.startsWith("Last refreshed")) refreshed = c.replace("Last refreshed:", "").trim();
+    if (r[9] && r[9] !== "Nick" && r[11]) nickToAbbr[r[9]] = r[11];
+    if (POS.includes(r[0])) { add(off, r[1], r[0], r[5] || 0, r[6] || 0, r[4] || 0); add(dfn, r[2], r[0], r[5] || 0, r[6] || 0, r[4] || 0); }
+  }
+
+  const weekRows = rows("This Weeks TDs");
+  const twKeys = ["slot", "kick", "team", "opp", "pick", "lean", "teamTd", "oppTd", "top", "share", "rzShare", "i10Share", "second", "secondShare", "rzRun", "i10Run", "oppRzRun"];
+  const thisWeek = []; let slot = null, twKick = null;
+  for (const r of weekRows.slice(headerAt(weekRows, "Slot") + 1)) {
+    if (!r[2]) continue;
+    slot = r[0] || slot; twKick = timeText(r[1]) || twKick;
+    const rec = zip(twKeys, [slot, twKick, ...r.slice(2)]);
+    rec.abbr = nickToAbbr[rec.team] || rec.team;
+    thisWeek.push(rec);
+  }
+
+  const nflAvg = {};
+  for (const r of rows("Matchup TDs")) {
+    const vals = r.filter(v => v !== null);
+    if (POS.includes(vals[0]) && !(vals[0] in nflAvg)) nflAvg[vals[0]] = vals[vals.length - 1];
+  }
+  const [usageHead, ...usageRows] = rows("USAGE DATA");
+  const usageKeys = usageHead.slice(0, 18);
+  const data = { week: +weekMatch[1], note: picks[1][0], refreshed, top, slate, thisWeek,
+    allowed: table("TDs Allowed by Pos"), firstScored: table("1st TD Scored"), firstAllowed: table("1st TD Allowed"), log: table("1st TD Log"),
+    usage: usageRows.filter(r => r[1]).map(r => zip(usageKeys, r)), off, dfn, nflAvg,
+    nicks: Object.fromEntries(Object.entries(nickToAbbr).map(([k, v]) => [v, k])) };
+
+  const bad = slate.length < 2 || slate.length > 32 || slate.length % 2 || !top.length || data.allowed.length !== 32
+    || !data.usage.length || !data.log.length || !Object.keys(off).length
+    || slate.some(r => !r.pick || !r.player || !String(r.conf).includes("%"));
+  if (bad) throw new Error("The sheet looks incomplete right now, so nothing was changed.");
+  return data;
+}
+window.parseWorkbook = parseWorkbook;
+$("#update-btn").onclick = async () => {
+  const btn = $("#update-btn"), status = $("#update-status");
+  btn.disabled = true; status.textContent = "Updating…";
+  try {
+    await loadXlsx();
+    const resp = await fetch(EXPORT_URL);
+    if (!resp.ok) throw new Error("Couldn't reach the sheet. Check that it's still shared by link, then try again.");
+    const fresh = parseWorkbook(await resp.arrayBuffer());
+    if (JSON.stringify(fresh) === JSON.stringify(D)) { status.textContent = `Already current: Week ${D.week}`; return; }
+    localStorage.setItem(SAVED_KEY, JSON.stringify(fresh));
+    location.hash = state.tab;
+    location.reload();
+  } catch (e) {
+    status.textContent = e.name === "TypeError" ? "Couldn't reach the sheet. Check your connection and try again."
+      : e.name === "QuotaExceededError" || e.name === "SecurityError" ? "This browser won't save the update. Turn off private browsing and try again."
+      : e.message;
+  } finally { btn.disabled = false; }
+};
+
+$("#stamp").textContent =`2026 season · Week ${D.week} · sheet data refreshed ${D.refreshed.split(",")[0]} · kickoffs in Central Time`;
 const h = location.hash.slice(1); if (TABS.some(t => t[0] === h)) state.tab = h;
 render();
 </script>
