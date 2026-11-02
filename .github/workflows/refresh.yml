@@ -2,8 +2,8 @@ name: Refresh from sheet
 
 on:
   schedule:
-    # Every day at 12:00 UTC. Nothing is published unless the sheet changed.
-    - cron: "0 12 * * *"
+    # Every day at 15:00 UTC, after the sheet's 6, 7 and 8am Central jobs. Nothing is published unless data changed.
+    - cron: "0 15 * * *"
     # Closer to kickoff on game days, so recorded plays reflect late injury news.
     - cron: "0 16 * * 0,6"
     - cron: "0 21 * * 1,4"
