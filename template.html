@@ -1,4 +1,4 @@
-<title>First TD Board</title>
+<title>NFL TD Board</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -153,7 +153,7 @@ table.data td.extra { white-space: normal; background: var(--sunken); text-align
 </style>
 
 <header class="top gutter"><div class="wrap brand">
-  <h1>First TD Board</h1>
+  <h1>NFL TD Board</h1>
   <small id="stamp"></small>
   <div class="updater"><span id="update-status" role="status"></span><button id="update-btn" type="button">Update data/matchups</button></div>
 </div></header>
@@ -204,7 +204,7 @@ function mixBar(label, s) {
       `<span class="${p === "DEF/ST" ? "DST" : p}" style="width:${n / total * 100}%" title="${p} ${n}">${p === "DEF/ST" ? "D" : p} ${n}</span>`).join("")}</div></div>`;
 }
 
-const TABS = [["picks", "Picks"], ["matchups", "Matchups"], ["defenses", "Defenses"], ["players", "Players"], ["log", "1st TD Log"]];
+const TABS = [["picks", "1st TD Picks"], ["matchups", "Matchups"], ["defenses", "TDs Allowed"], ["players", "Player Usage"], ["log", "1st TD Log"]];
 function go(tab, extra) {
   state.tab = tab; Object.assign(state, extra || {});
   render(); scrollTo(0, 0);
@@ -224,8 +224,9 @@ function viewPicks() {
   const days = ["All", ...new Set(D.slate.map(r => r.day))];
   const match = r => (state.pos === "All" || r.pick.startsWith(state.pos)) && (!state.star || r.pick.includes("★"));
   const shown = games.filter(g => (state.day === "All" || g[0].day === state.day) && g.some(match));
-  let html = `<section class="stack" style="gap:10px"><div><h2>Top plays, Week ${D.week}</h2>
-    <p class="hint">Confidence is a ranking score from about six games per team, not a true probability. Injuries and inactives aren't checked, so confirm the player before betting.</p></div>
+  let html = `<section class="stack" style="gap:10px"><div><h2>First TD picks, Week ${D.week}</h2>
+    <p class="hint">The player most likely to score each team's first touchdown of the game. Confidence is a ranking score from about six games per team, not a true probability. Injuries and inactives aren't checked, so confirm the player before betting.</p></div>
+    <h3>Top plays</h3>
     <div class="tops">${D.top.map(t => `<button class="top-card" data-game="${esc(t.Team)}">
       <div class="l1"><span>${esc(t.Team)} ${esc(t.Matchup)}</span>${chip(t.Pick)}</div>
       <div class="name">${esc(t.Player)}</div>
@@ -233,7 +234,7 @@ function viewPicks() {
       <div class="l3"><span><b>${esc(t["Conf."])}</b> conf</span><span><b>${esc(t["RZ opps"])}</b> RZ</span><span><b>${t.TDs}</b> TD</span><span><b>${t["Team 1st TDs"]}</b> team 1st</span></div>
     </button>`).join("")}</div></section>
   <section><div class="stack" style="gap:10px">
-    <h2>Full slate</h2>
+    <h3>Every team this week</h3>
     <div class="filters">${seg("day", days, state.day)}${seg("pos", ["All", ...POS], state.pos)}
       <div class="seg"><button data-star aria-pressed="${state.star}">★ only</button></div></div>
     <div>
@@ -278,10 +279,11 @@ function viewMatchups() {
   const g = games.find(x => x.some(r => r.team === state.game)) || games[0];
   const [a, b] = g;
   const away = a.opp.startsWith("@") ? a : b, home = away === a ? b : a;
-  return `<div class="filters"><label for="game-pick"><h2 style="display:inline">Week ${D.week} matchup</h2></label>
+  return `<div><h2>Game matchups, Week ${D.week}</h2><p class="hint">One game at a time: all touchdowns by position this season, with first TD trends marked separately.</p></div>
+    <div class="filters"><label for="game-pick" class="sub">Game</label>
     <select id="game-pick">${games.map(x => `<option value="${esc(x[0].team)}" ${x === g ? "selected" : ""}>${esc(x[0].day)} ${esc(x[0].kick)}: ${esc(nick(x[0].opp.startsWith("@") ? x[0].team : x[1].team))} @ ${esc(nick(x[0].opp.startsWith("@") ? x[1].team : x[0].team))}</option>`).join("")}</select></div>
   <section class="panel" style="gap:8px">
-    <h3>Who scores the game's first TD</h3>
+    <h3>First TD of the game: which team</h3>
     <div class="splitbar"><span class="a" style="width:${parseInt(away.gameFirst)}%">${esc(away.team)} ${esc(away.gameFirst)}</span><span class="b" style="width:${parseInt(home.gameFirst)}%">${esc(home.team)} ${esc(home.gameFirst)}</span></div>
   </section>
   <div class="vs">${panel(away, home)}${panel(home, away)}</div>`;
@@ -296,14 +298,17 @@ function panel(r, o) {
   return `<section class="panel">
     <div class="panel-head"><div><h2>${esc(nick(r.team))} offense</h2><div class="sub">vs ${esc(nick(o.team))} defense · ${gpO} and ${gpD} games</div></div>
       <div style="display:flex;gap:6px;align-items:center"><span class="sub">1st TD</span>${chip(r.pick)}${t.lean ? `<span class="sub">Any TD</span>${chip(t.pick || t.lean)}` : ""}</div></div>
+    <h3>All TDs by position, season</h3>
     <div class="bars">${POS.map(p => `<div class="bar-row"><span class="chip ${p}">${p}</span><div class="bar-pair">
         <div class="bar o"><i style="width:${w(tot(off[p]))}%"></i>${tot(off[p])}</div>
         <div class="bar d"><i style="width:${w(tot(dfn[p]))}%"></i>${tot(dfn[p])}</div>
         <span class="avg" style="left:${w(D.nflAvg[p])}%" title="NFL average ${D.nflAvg[p]}"></span>
       </div></div>`).join("")}</div>
     <div class="key"><span><i style="background:var(--accent)"></i>${esc(r.team)} rush + rec TDs</span><span><i style="background:var(--muted)"></i>${esc(o.team)} allowed</span><span>Dashed line: NFL average</span></div>
+    <h3>First TDs by position, season</h3>
     <div class="mixes">${mixBar(`${r.team} 1st TDs`, r.teamPos)}${mixBar(`${o.team} allows 1st TD`, r.oppPos)}</div>
-    <table class="mini"><thead><tr><th>Key players</th><th>Season</th><th>In 20</th><th>In 10</th></tr></thead><tbody>
+    <h3>Key players, share of team usage</h3>
+    <table class="mini"><thead><tr><th>Player</th><th>Season</th><th>In 20</th><th>In 10</th></tr></thead><tbody>
       <tr><td><b>${esc(t.top)}</b></td><td>${pct(t.share)}</td><td>${pct(t.rzShare)}</td><td>${pct(t.i10Share)}</td></tr>
       <tr><td>${esc(t.second)}</td><td>${pct(t.secondShare)}</td><td colspan="2"></td></tr>
       <tr><td>1st TD pick: <b>${esc(r.player)}</b></td><td colspan="3">${esc(r.rz)} RZ · ${r.tds} TD</td></tr>
@@ -321,7 +326,7 @@ function viewDefenses() {
   const { key, dir } = state.def;
   rows.sort((a, b) => (typeof a[key] === "string" ? String(a[key]).localeCompare(b[key]) : (a[key] ?? -1) - (b[key] ?? -1)) * dir);
   const heat = {}; DEF_COLS.forEach(([k, , f]) => { if (f === 2 || f === "p") heat[k] = Math.max(...rows.map(r => r[k] || 0)); });
-  return `<div><h2>TDs allowed by position</h2><p class="hint">Darker cells give up more touchdowns. Select a team to see the players they face this week. Sort by any column.</p></div>
+  return `<div><h2>TDs allowed by defense</h2><p class="hint">All touchdowns each defense has allowed this season, per game, except the last column, which is how often it allowed the game's first TD. Darker cells give up more. Select a team to see the players it faces this week, or sort by any column.</p></div>
   <div class="tablebox"><table class="data"><thead><tr>${DEF_COLS.map(([k, l, f]) =>
     `<th class="${f === "t" ? "t" : ""}" aria-sort="${key === k ? (dir > 0 ? "ascending" : "descending") : "none"}"><button data-defsort="${esc(k)}">${esc(l)}</button></th>`).join("")}</tr></thead>
   <tbody>${rows.map(r => {
@@ -363,7 +368,7 @@ function plyFiltered() {
 }
 function viewPlayers() {
   const teams = [...new Set(D.usage.map(u => u.team))].sort();
-  return `<div><h2>Player usage</h2><p class="hint">Opp % is a player's share of team carries plus targets. RZ means inside the 20, In-10 inside the 10.</p></div>
+  return `<div><h2>Player usage</h2><p class="hint">How much each player gets the ball this season, not how many TDs they've scored. Opp % is a player's share of team carries plus targets. RZ means inside the 20, In-10 inside the 10. Team 1st TDs counts the games in which the player scored their team's first TD.</p></div>
   <div class="filters"><input type="search" id="ply-q" placeholder="Search players" aria-label="Search players" value="${esc(state.ply.q)}">
     <select id="ply-team" aria-label="Team"><option>All</option>${teams.map(t => `<option ${t === state.ply.team ? "selected" : ""}>${t}</option>`).join("")}</select>
     ${seg("plypos", ["All", ...POS], state.ply.pos)}<span class="count" id="ply-count"></span></div>
@@ -385,7 +390,7 @@ function viewLog() {
   const rows = D.log.filter(l => (s.team === "All" || l.Team === s.team) && (s.week === "All" || String(l.Week) === String(s.week)) && (s.pos === "All" || l[posKey] === s.pos));
   const tally = {}; rows.forEach(l => { if (l[posKey]) tally[l[posKey]] = (tally[l[posKey]] || 0) + 1; });
   const mix = Object.entries(tally).sort((a, b) => b[1] - a[1]).map(([p, n]) => `${p} ${n}`).join(" · ");
-  return `<div><h2>Every first touchdown</h2><p class="hint">One row per team per game, Weeks ${weeks[0]} to ${weeks[weeks.length - 1]}. Switch between the first TD a team scored and the first it allowed.</p></div>
+  return `<div><h2>First TD log</h2><p class="hint">Only the first touchdown for each team in each game, not every TD. One row per team per game, Weeks ${weeks[0]} to ${weeks[weeks.length - 1]}. Switch between the first TD a team scored and the first it allowed.</p></div>
   <div class="filters">${seg("logside", ["Scored", "Allowed"], s.side === "team" ? "Scored" : "Allowed")}
     <select id="log-team" aria-label="Team"><option>All</option>${teams.map(t => `<option ${t === s.team ? "selected" : ""}>${t}</option>`).join("")}</select>
     <select id="log-week" aria-label="Week"><option value="All">All weeks</option>${weeks.map(w => `<option value="${w}" ${String(w) === String(s.week) ? "selected" : ""}>Week ${w}</option>`).join("")}</select>
