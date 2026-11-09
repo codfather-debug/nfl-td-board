@@ -274,7 +274,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -290,7 +294,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -306,7 +314,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -322,7 +334,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -338,7 +354,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -354,7 +374,11 @@
 "gameRate": 0.2,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -370,7 +394,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -386,7 +414,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -402,7 +434,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -418,7 +454,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": true,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -434,7 +474,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -450,7 +494,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": true
 },
 {
 "week": 9,
@@ -466,7 +514,11 @@
 "gameRate": 0.173,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -482,7 +534,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -498,7 +554,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -514,7 +574,11 @@
 "gameRate": 0.173,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -530,7 +594,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -546,7 +614,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": false,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -562,7 +634,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -578,7 +654,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -594,7 +674,11 @@
 "gameRate": 0.173,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -610,7 +694,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -626,7 +714,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -642,7 +734,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -658,7 +754,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -674,7 +774,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -690,7 +794,11 @@
 "gameRate": 0.028,
 "isPlay": false,
 "isPick": true,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -703,7 +811,11 @@
 "status": "",
 "isPlay": false,
 "isPick": false,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -719,7 +831,11 @@
 "gameRate": 0.2,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": true
 },
 {
 "week": 9,
@@ -735,7 +851,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -751,7 +871,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -767,7 +891,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -783,7 +911,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -799,7 +931,11 @@
 "gameRate": 0.2,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": true
 },
 {
 "week": 9,
@@ -815,7 +951,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -831,7 +971,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -847,7 +991,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -863,7 +1011,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -879,7 +1031,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -895,7 +1051,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -911,7 +1071,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -927,7 +1091,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -943,7 +1111,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -959,7 +1131,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -975,7 +1151,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": true
 },
 {
 "week": 9,
@@ -991,7 +1171,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1007,7 +1191,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1023,7 +1211,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1039,7 +1231,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": false,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1055,7 +1251,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1071,7 +1271,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1087,7 +1291,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1103,7 +1311,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": false,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1119,7 +1331,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1135,7 +1351,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1151,7 +1371,11 @@
 "gameRate": 0.028,
 "isPlay": false,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1167,7 +1391,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1183,7 +1411,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1199,7 +1431,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": false,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1215,7 +1451,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1231,7 +1471,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1247,7 +1491,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1263,7 +1511,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1279,7 +1531,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1295,7 +1551,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": false,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1311,7 +1571,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1327,7 +1591,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1343,7 +1611,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1359,7 +1631,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1375,7 +1651,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1391,7 +1671,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1407,7 +1691,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1423,7 +1711,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1439,7 +1731,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1455,7 +1751,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1471,7 +1771,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1487,7 +1791,11 @@
 "gameRate": 0.028,
 "isPlay": false,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1503,7 +1811,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": true
 },
 {
 "week": 9,
@@ -1519,7 +1831,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1535,7 +1851,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1551,7 +1871,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1567,7 +1891,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1583,7 +1911,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1599,7 +1931,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1615,7 +1951,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1631,7 +1971,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1647,7 +1991,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1663,7 +2011,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1679,7 +2031,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1695,7 +2051,11 @@
 "gameRate": 0.028,
 "isPlay": false,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1711,7 +2071,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1727,7 +2091,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1743,7 +2111,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1759,7 +2131,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1775,7 +2151,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": false,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1791,7 +2171,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": true
 },
 {
 "week": 9,
@@ -1807,7 +2191,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1823,7 +2211,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1839,7 +2231,11 @@
 "gameRate": 0.127,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1855,7 +2251,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1871,7 +2271,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1887,7 +2291,11 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1903,7 +2311,11 @@
 "gameRate": 0.173,
 "isPlay": true,
 "isPick": true,
-"isSheet": true
+"isSheet": true,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1919,7 +2331,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1935,7 +2351,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": true,
+"gameFirst": true
 },
 {
 "week": 9,
@@ -1951,7 +2371,11 @@
 "gameRate": 0.076,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": true,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
@@ -1967,20 +2391,24 @@
 "gameRate": 0.028,
 "isPlay": true,
 "isPick": false,
-"isSheet": false
+"isSheet": false,
+"played": true,
+"anyTd": false,
+"teamFirst": false,
+"gameFirst": false
 },
 {
 "week": 9,
 "team": "BUF",
 "opp": "@ MIN",
-"imp": 23.25,
-"lockedAt": "2026-11-08T20:16Z",
+"imp": 25.0,
+"lockedAt": "2026-11-09T23:43Z",
 "player": "James Cook",
 "pos": "RB",
 "status": "Active",
 "anyRate": 0.418,
-"firstRate": 0.202,
-"gameRate": 0.127,
+"firstRate": 0.307,
+"gameRate": 0.173,
 "isPlay": true,
 "isPick": true,
 "isSheet": true
@@ -1989,8 +2417,8 @@
 "week": 9,
 "team": "BUF",
 "opp": "@ MIN",
-"imp": 23.25,
-"lockedAt": "2026-11-08T20:16Z",
+"imp": 25.0,
+"lockedAt": "2026-11-09T23:43Z",
 "player": "Josh Allen",
 "pos": "QB",
 "status": "Active",
@@ -2005,8 +2433,8 @@
 "week": 9,
 "team": "BUF",
 "opp": "@ MIN",
-"imp": 23.25,
-"lockedAt": "2026-11-08T20:16Z",
+"imp": 25.0,
+"lockedAt": "2026-11-09T23:43Z",
 "player": "Khalil Shakir",
 "pos": "WR",
 "status": "Active",
@@ -2021,8 +2449,8 @@
 "week": 9,
 "team": "BUF",
 "opp": "@ MIN",
-"imp": 23.25,
-"lockedAt": "2026-11-08T20:16Z",
+"imp": 25.0,
+"lockedAt": "2026-11-09T23:43Z",
 "player": "DJ Moore",
 "pos": "WR",
 "status": "Active",
@@ -2037,8 +2465,8 @@
 "week": 9,
 "team": "BUF",
 "opp": "@ MIN",
-"imp": 23.25,
-"lockedAt": "2026-11-08T20:16Z",
+"imp": 25.0,
+"lockedAt": "2026-11-09T23:43Z",
 "player": "Keon Coleman",
 "pos": "WR",
 "status": "Active",
@@ -2051,16 +2479,32 @@
 },
 {
 "week": 9,
+"team": "BUF",
+"opp": "@ MIN",
+"imp": 25.0,
+"lockedAt": "2026-11-09T23:43Z",
+"player": "Dalton Kincaid",
+"pos": "TE",
+"status": "Active",
+"anyRate": 0.291,
+"firstRate": 0.053,
+"gameRate": 0.028,
+"isPlay": true,
+"isPick": false,
+"isSheet": false
+},
+{
+"week": 9,
 "team": "MIN",
 "opp": "vs BUF",
-"imp": 20.25,
-"lockedAt": "2026-11-08T20:16Z",
+"imp": 21.5,
+"lockedAt": "2026-11-09T23:43Z",
 "player": "Aaron Jones",
 "pos": "RB",
 "status": "Active",
-"anyRate": 0.365,
-"firstRate": 0.146,
-"gameRate": 0.076,
+"anyRate": 0.416,
+"firstRate": 0.202,
+"gameRate": 0.127,
 "isPlay": true,
 "isPick": true,
 "isSheet": true
@@ -2069,12 +2513,12 @@
 "week": 9,
 "team": "MIN",
 "opp": "vs BUF",
-"imp": 20.25,
-"lockedAt": "2026-11-08T20:16Z",
+"imp": 21.5,
+"lockedAt": "2026-11-09T23:43Z",
 "player": "Justin Jefferson",
 "pos": "WR",
 "status": "",
-"anyRate": 0.291,
+"anyRate": 0.365,
 "firstRate": 0.146,
 "gameRate": 0.076,
 "isPlay": true,
@@ -2085,8 +2529,8 @@
 "week": 9,
 "team": "MIN",
 "opp": "vs BUF",
-"imp": 20.25,
-"lockedAt": "2026-11-08T20:16Z",
+"imp": 21.5,
+"lockedAt": "2026-11-09T23:43Z",
 "player": "T.J. Hockenson",
 "pos": "TE",
 "status": "Active",
@@ -2101,8 +2545,8 @@
 "week": 9,
 "team": "MIN",
 "opp": "vs BUF",
-"imp": 20.25,
-"lockedAt": "2026-11-08T20:16Z",
+"imp": 21.5,
+"lockedAt": "2026-11-09T23:43Z",
 "player": "Jordan Addison",
 "pos": "WR",
 "status": "Active",
@@ -2117,8 +2561,8 @@
 "week": 9,
 "team": "MIN",
 "opp": "vs BUF",
-"imp": 20.25,
-"lockedAt": "2026-11-08T20:16Z",
+"imp": 21.5,
+"lockedAt": "2026-11-09T23:43Z",
 "player": "Jordan Mason",
 "pos": "RB",
 "status": "Active",
