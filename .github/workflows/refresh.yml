@@ -12,16 +12,25 @@ on:
 permissions:
   contents: write
 
+# Two refreshes at once would both try to publish; let the first finish.
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
       - run: pip install -r requirements.txt
       - run: python build.py
+      # The page is only published if build.py and the page agree on every player's chance.
+      - run: python -m unittest discover tests
       - name: Publish if changed
         run: |
           git add index.html results
@@ -31,5 +40,6 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit -m "Refresh data and results"
+            git pull --rebase
             git push
           fi

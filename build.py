@@ -3,55 +3,95 @@
 
 Usage: python3 build.py [path/to/export.xlsx]
 With no path, downloads the sheet (it must be viewable by anyone with the link).
+
+The player scoring here is repeated in template.html so the page can rescore after its own
+Update button. tests/test_build.py checks that the two give the same numbers.
 """
 import collections
 import csv
 import datetime
+import functools
 import io
 import json
 import math
 import os
 import re
 import sys
+import time
 import unicodedata
 import urllib.request
+import zoneinfo
 
 import openpyxl
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SEASON = 2026
 SHEET_ID = "1fwtkoY2KveC6TJPRyn0pvHPseVw2_4j2Qbud1x0q1pU"
 EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
-
 NFLVERSE = "https://github.com/nflverse/nflverse-data/releases/download"
-SNAPS_URL = f"{NFLVERSE}/snap_counts/snap_counts_2026.csv"
-STATS_URL = f"{NFLVERSE}/stats_player/stats_player_week_2026.csv"
+SNAPS_URL = f"{NFLVERSE}/snap_counts/snap_counts_{SEASON}.csv"
+STATS_URL = f"{NFLVERSE}/stats_player/stats_player_week_{SEASON}.csv"
 LINES_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
 INJURIES_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries"
+EASTERN = zoneinfo.ZoneInfo("America/New_York")  # The schedule lists kickoffs in Eastern time.
 RECENT_WEIGHTS = (0.6, 0.25, 0.15)  # Team's last game first.
 WATCHED_STATUSES = {"Active", "Out", "Doubtful", "Questionable", "Injured Reserve", "Suspension"}
+UNAVAILABLE = {"Out", "Doubtful", "Injured Reserve", "Suspension"}
+POSITIONS = ("RB", "WR", "TE", "QB")
+# What a sportsbook pays an anytime-TD bet on: every score by the player except a pass thrown.
+PLAYER_TD_COLUMNS = ("rushing_tds", "receiving_tds", "special_teams_tds", "fumble_recovery_tds")
+LEAGUE_AVG_POINTS = 23      # Used for a team with no betting line yet.
+TEAM_FIRST_CAP = 0.9        # A team's players can't add up to more than this chance of its first TD.
+HISTORY_PATH = os.path.join(HERE, "results", "history.json")
 
 
+@functools.lru_cache(maxsize=None)
 def fetch(url):
-    with urllib.request.urlopen(url, timeout=120) as resp:
-        return resp.read()
+    """Download once per build, retrying a source that is briefly down."""
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(url, timeout=120) as resp:
+                return resp.read()
+        except OSError:
+            if attempt == 2:
+                raise
+            time.sleep(5 * (attempt + 1))
 
 
 def download():
     return io.BytesIO(fetch(EXPORT_URL))
 
 
+@functools.lru_cache(maxsize=None)
 def fetch_csv(url):
-    return list(csv.DictReader(io.StringIO(fetch(url).decode("utf-8"))))
+    return tuple(csv.DictReader(io.StringIO(fetch(url).decode("utf-8"))))
+
+
+def season_games():
+    return [g for g in fetch_csv(LINES_URL) if g["season"] == str(SEASON)]
+
+
+def number(value):
+    return float(value or 0)
+
+
+def player_tds(row):
+    return int(sum(number(row.get(c)) for c in PLAYER_TD_COLUMNS))
 
 
 def norm_name(name):
-    """Keep in step with normName in template.html."""
+    """Keep in step with normName in template.html and norm_name in model/features.py."""
     name = unicodedata.normalize("NFKD", name)
     name = "".join(c for c in name if not unicodedata.combining(c)).lower()
     name = re.sub(r"[.'’\-]", "", name)
     name = re.sub(r"\s+(jr|sr|ii|iii|iv|v)$", "", name.strip())
     return re.sub(r"\s+", " ", name)
+
+
+def kickoff_iso(gameday, gametime):
+    """Kickoff with the right Eastern offset, which changes with daylight saving. Same as kickoffIso in template.html."""
+    return datetime.datetime.fromisoformat(f"{gameday}T{gametime}").replace(tzinfo=EASTERN).isoformat()
 
 
 def game_lines(week):
@@ -60,11 +100,11 @@ def game_lines(week):
     spread_line is positive when the home team is favored.
     """
     out = {}
-    for g in fetch_csv(LINES_URL):
-        if g["season"] != "2026" or g["week"] != str(week) or not g["spread_line"] or not g["total_line"]:
+    for g in season_games():
+        if g["week"] != str(week) or not g["spread_line"] or not g["total_line"]:
             continue
         spread, total = float(g["spread_line"]), float(g["total_line"])
-        info = {"total": total, "kickoff": f"{g['gameday']}T{g['gametime']}:00-05:00", "final": bool(g["result"])}
+        info = {"total": total, "kickoff": kickoff_iso(g["gameday"], g["gametime"]), "final": bool(g["result"])}
         out[g["home_team"]] = {**info, "margin": spread, "imp": (total + spread) / 2}
         out[g["away_team"]] = {**info, "margin": -spread, "imp": (total - spread) / 2}
     return out
@@ -74,8 +114,8 @@ def counted_games(refreshed):
     """(team, week) of games played before the sheet's refresh, which its usage totals include."""
     cutoff = datetime.datetime.strptime(refreshed.split(",")[0], "%m/%d/%Y").date().isoformat()
     out = set()
-    for g in fetch_csv(LINES_URL):
-        if g["season"] == "2026" and g["game_type"] == "REG" and g["gameday"] < cutoff:
+    for g in season_games():
+        if g["game_type"] == "REG" and g["gameday"] < cutoff:
             out |= {(g["home_team"], int(g["week"])), (g["away_team"], int(g["week"]))}
     return out
 
@@ -94,14 +134,12 @@ def recent_usage(usage, counted):
         week = int(r["week"])
         key = (r["team"], norm_name(r["player"]))
         team_weeks[r["team"]].add(week)
-        by_player[key][week] = float(r["offense_pct"] or 0)
+        by_player[key][week] = number(r["offense_pct"])
         positions[key] = r["position"]
     tds = collections.Counter()
     for r in stats:
-        if (r["team"], int(r["week"])) not in counted:
-            continue
-        tds[(r["team"], norm_name(r["player_display_name"]))] += int(
-            float(r["rushing_tds"] or 0) + float(r["receiving_tds"] or 0))
+        if (r["team"], int(r["week"])) in counted:
+            tds[(r["team"], norm_name(r["player_display_name"]))] += player_tds(r)
 
     out = collections.defaultdict(dict)
     for u in usage:
@@ -134,6 +172,8 @@ def injuries(nicks):
     latest = {}
     for team in json.loads(fetch(INJURIES_URL)).get("injuries", []):
         abbr = next((a for a, n in nicks.items() if team.get("displayName", "").endswith(n)), None)
+        if not abbr:
+            continue
         for item in team.get("injuries", []):
             key = f"{abbr}|{norm_name(item['athlete']['displayName'])}"
             if key not in latest or item.get("date", "") > latest[key][0]:
@@ -141,17 +181,40 @@ def injuries(nicks):
     return {k: v[1] for k, v in latest.items() if v[1] in WATCHED_STATUSES}
 
 
-HISTORY_PATH = os.path.join(HERE, "results", "history.json")
-UNAVAILABLE = {"Out", "Doubtful", "Injured Reserve", "Suspension"}
-LOWEST_TRACKED_ANY_RATE = 0.29
-
+# ---- Player scoring. model/model.json holds the fitted model; template.html repeats this section. ----
 
 def sigmoid(x):
     return 1 / (1 + math.exp(-x))
 
 
-def tier_for(tiers, p):
-    return [t for t in tiers if p >= t["min"]][-1]
+def calibrate(curve, p):
+    """Turn the model's raw number into how often it came true out of sample. Same as calibrate in template.html."""
+    xs, ys = curve["x"], curve["y"]
+    if p <= xs[0]:
+        return ys[0]
+    for i in range(1, len(xs)):
+        if p <= xs[i]:
+            return ys[i - 1] + (ys[i] - ys[i - 1]) * (p - xs[i - 1]) / (xs[i] - xs[i - 1])
+    return ys[-1]
+
+
+def model_inputs(model, u, x, imp, missrz):
+    """The numbers the model reads for one player. Same as modelInputs in template.html."""
+    base = {"oppg": ((u["targets"] or 0) + (u["carries"] or 0)) / x["gp"], "rzsh": u["rz_opp_share"] or 0,
+            "i10sh": u["i10_opp_share"] or 0, "snaplast": x["lastPlayed"] or 0, "imp": imp, "missrz": missrz,
+            **{"is" + p: int(u["pos"] == p) for p in POSITIONS}}
+    return {f: math.sqrt(max(base[f[5:]], 0)) if f.startswith("sqrt_") else base[f] for f in model["features"]}
+
+
+def raw_chance(model, coefficients, inputs):
+    return sigmoid(coefficients["intercept"] + sum(coefficients[f] * inputs[f] for f in model["features"]))
+
+
+def fair_odds(p):
+    """The American odds at which a bet with this chance breaks even. Same as fairOdds in template.html."""
+    if not 0 < p < 1:
+        return None
+    return round(-100 * p / (1 - p)) if p >= 0.5 else round(100 * (1 - p) / p)
 
 
 def starter_score(u, x, first):
@@ -176,29 +239,46 @@ def choose_pick(sheet_player, position, team_players):
 
 
 def score_players(data):
-    """Same scoring as scorePlayers in template.html. Keep the two in step."""
+    """Each player's chance of a TD this week. Same as scorePlayers in template.html."""
     model, rows, players = data["model"], {r["team"]: r for r in data["slate"]}, []
     firsts = collections.Counter((l["Team"], l.get("Team 1st TD Scorer")) for l in data["log"])
+    listed = []
+    missing = collections.Counter()  # Red-zone share of players who are out, by team and position.
     for u in data["usage"]:
         x = data["recent"].get(u["team"], {}).get(u["player"])
-        line = data["lines"].get(u["team"])
-        if u["team"] not in rows or not x or x["gp"] < 2 or u["pos"] not in ("RB", "WR", "TE", "QB") or not line:
+        if u["team"] not in rows or not x or x["gp"] < 2 or u["pos"] not in POSITIONS:
             continue
-        f = {"oppg": ((u["targets"] or 0) + (u["carries"] or 0)) / x["gp"], "rzsh": u["rz_opp_share"] or 0,
-             "i10sh": u["i10_opp_share"] or 0, "snaplast": x["lastPlayed"] or 0, "imp": line["imp"],
-             "isRB": int(u["pos"] == "RB"), "isWR": int(u["pos"] == "WR"), "isTE": int(u["pos"] == "TE"), "isQB": int(u["pos"] == "QB")}
-        predict = lambda c: sigmoid(c["intercept"] + sum(c[k] * f[k] for k in model["features"]))
         status = data["injuries"].get(f"{u['team']}|{norm_name(u['player'])}", "")
-        p_any, p_first = predict(model["any"]), predict(model["first"])
-        first_tier = tier_for(model["firstTiers"], p_first)
+        unavailable = status in UNAVAILABLE or (not x["recent"] and status != "Active")
+        if unavailable:
+            missing[(u["team"], u["pos"])] += u["rz_opp_share"] or 0
+        listed.append((u, x, status, unavailable))
+    for u, x, status, unavailable in listed:
+        line = data["lines"].get(u["team"])
+        # A player's chance rises when a teammate at their position is out. Their own absence doesn't count.
+        missrz = missing[(u["team"], u["pos"])] - ((u["rz_opp_share"] or 0) if unavailable else 0)
+        inputs = model_inputs(model, u, x, line["imp"] if line else LEAGUE_AVG_POINTS, missrz)
         players.append({"player": u["player"], "team": u["team"], "pos": u["pos"], "status": status,
-                        "unavailable": status in UNAVAILABLE or (not x["recent"] and status != "Active"),
+                        "unavailable": unavailable, "missrz": missrz,
                         "starter": starter_score(u, x, firsts[(u["team"], u["player"])]),
                         "rzPerGame": ((u["rz_targets"] or 0) + (u["rz_carries"] or 0)) / x["gp"],
-                        "lastPlayed": x["lastPlayed"] or 0, "pAny": p_any, "pFirst": p_first,
-                        "anyRate": tier_for(model["anyTiers"], p_any)["hit"],
-                        "firstRate": first_tier["hit"], "gameRate": first_tier["game"]})
-    players.sort(key=lambda p: -p["pAny"])
+                        "lastPlayed": x["lastPlayed"] or 0, "hasLine": bool(line),
+                        "rawAny": raw_chance(model, model["any"], inputs),
+                        "anyRate": calibrate(model["anyCal"], raw_chance(model, model["any"], inputs)),
+                        "firstRate": calibrate(model["firstCal"], raw_chance(model, model["first"], inputs))})
+    # One team's first TD goes to one player, so a team's chances can't add up to more than the cap.
+    totals = collections.Counter()
+    for p in players:
+        if not p["unavailable"]:
+            totals[p["team"]] += p["firstRate"]
+    for p in players:
+        if totals[p["team"]] > TEAM_FIRST_CAP:
+            p["firstRate"] *= TEAM_FIRST_CAP / totals[p["team"]]
+        # The game's first TD: the player scores their team's first, and their team scores before the other one.
+        line = data["lines"].get(p["team"])
+        team_first = sigmoid(model["gameFirstSlope"] * line["margin"]) if line else 0.5
+        p["gameRate"] = min(p["firstRate"], p["firstRate"] * team_first * model["gameFirstScale"])
+    players.sort(key=lambda p: (-p["anyRate"], -p["rawAny"]))
     return players
 
 
@@ -207,7 +287,7 @@ def snapshot_plays(data, history, now):
     if not data["recent"] or not data["injuriesAt"] or not data["lines"]:
         return
     players = score_players(data)
-    week = data["week"]
+    week, play_min = data["week"], data["model"]["playMin"]
     for r in data["slate"]:
         team, line = r["team"], data["lines"].get(r["team"])
         if not line or line["final"] or now >= datetime.datetime.fromisoformat(line["kickoff"]):
@@ -220,10 +300,10 @@ def snapshot_plays(data, history, now):
         pick = chosen["player"] if chosen else None
         entries = {}
         for p in available:
-            if p["anyRate"] >= LOWEST_TRACKED_ANY_RATE or p["player"] == pick:
+            if p["anyRate"] >= play_min or p["player"] == pick:
                 entries[p["player"]] = {k: (round(p[k], 3) if isinstance(p[k], float) else p[k])
                                         for k in ("player", "pos", "status", "anyRate", "firstRate", "gameRate")}
-                entries[p["player"]].update(isPlay=p["anyRate"] >= LOWEST_TRACKED_ANY_RATE, isPick=p["player"] == pick, isSheet=False)
+                entries[p["player"]].update(isPlay=p["anyRate"] >= play_min, isPick=p["player"] == pick, isSheet=False)
         sheet = r["player"]
         entries.setdefault(sheet, {"player": sheet, "pos": r["pick"].split()[0], "status": "", "isPlay": False, "isPick": False})["isSheet"] = True
         history["plays"] = [e for e in history["plays"] if not (e["week"] == week and e["team"] == team)]
@@ -237,18 +317,17 @@ def grade_plays(history, log):
     if not pending:
         return
     finals = set()
-    for g in fetch_csv(LINES_URL):
-        if g["season"] == "2026" and g["result"]:
+    for g in season_games():
+        if g["result"]:
             finals |= {(g["home_team"], int(g["week"])), (g["away_team"], int(g["week"]))}
     snaps, tds, stat_games = {}, collections.Counter(), set()
     snap_games = set()
     for r in fetch_csv(SNAPS_URL):
         snap_games.add((r["team"], int(r["week"])))
-        snaps[(r["team"], norm_name(r["player"]), int(r["week"]))] = float(r["offense_pct"] or 0)
+        snaps[(r["team"], norm_name(r["player"]), int(r["week"]))] = number(r["offense_pct"])
     for r in fetch_csv(STATS_URL):
         stat_games.add((r["team"], int(r["week"])))
-        tds[(r["team"], norm_name(r["player_display_name"]), int(r["week"]))] += int(
-            float(r["rushing_tds"] or 0) + float(r["receiving_tds"] or 0))
+        tds[(r["team"], norm_name(r["player_display_name"]), int(r["week"]))] += player_tds(r)
     firsts = {(l["Team"], int(l["Week"])): l for l in log}
     for e in pending:
         game, name = (e["team"], e["week"]), norm_name(e["player"])
@@ -279,8 +358,10 @@ def update_history(data):
     except Exception as e:
         print(f"Could not grade results: {e}")
     os.makedirs(os.path.dirname(HISTORY_PATH), exist_ok=True)
-    with open(HISTORY_PATH, "w", encoding="utf-8") as f:
+    # Write beside the file and swap it in, so a crash can't leave half a history.
+    with open(HISTORY_PATH + ".tmp", "w", encoding="utf-8") as f:
         json.dump(history, f, indent=0, ensure_ascii=False)
+    os.replace(HISTORY_PATH + ".tmp", HISTORY_PATH)
     return history
 
 
@@ -385,7 +466,7 @@ def position_tds(ws):
                 refreshed = c.replace("Last refreshed:", "").strip()
         if len(r) > 11 and r[9] and r[9] != "Nick" and r[11]:
             nick[r[9]] = r[11]
-        if r[0] in ("QB", "RB", "WR", "TE"):
+        if r[0] in POSITIONS:
             pa, ru, re_ = r[4] or 0, r[5] or 0, r[6] or 0
             for bucket, team in ((off, r[1]), (dfn, r[2])):
                 t = bucket[team][r[0]]
@@ -399,12 +480,22 @@ def nfl_avg(ws):
     out = {}
     for r in rows(ws):
         vals = [v for v in r if v is not None]
-        if vals and vals[0] in ("QB", "RB", "WR", "TE") and vals[0] not in out:
+        if vals and vals[0] in POSITIONS and vals[0] not in out:
             out[vals[0]] = vals[-1]
     return out
 
 
-def main(path):
+def write_page(data, path=os.path.join(HERE, "index.html")):
+    payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/")
+    with open(os.path.join(HERE, "template.html"), encoding="utf-8") as f:
+        html = f.read()
+    with open(path, "w", encoding="utf-8") as f:
+        f.write('<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n')
+        f.write(html.replace("/*__DATA__*/null", payload))
+
+
+def parse_sheet(path):
+    """Everything the page needs from the sheet. Same as parseWorkbook in template.html; tests check they agree."""
     wb = openpyxl.load_workbook(path, data_only=True)
     week, note, top, slate = picks(wb["1st TD Picks"])
     off, dfn, nick, refreshed = position_tds(wb["POS DATA"])
@@ -431,6 +522,12 @@ def main(path):
         "nicks": {v: k for k, v in nick.items()},
     }
     validate(data)
+    return data
+
+
+def main(path):
+    data = parse_sheet(path)
+    week, slate, usage, refreshed = data["week"], data["slate"], data["usage"], data["refreshed"]
     # These sources are extras: if one is down, the page falls back to the sheet's picks.
     try:
         data["recent"] = recent_usage(usage, counted_games(refreshed))
@@ -450,13 +547,9 @@ def main(path):
         data["lines"] = {}
     with open(os.path.join(HERE, "model", "model.json"), encoding="utf-8") as f:
         data["model"] = json.load(f)
+    data["season"] = SEASON
     data["results"] = update_history(data)
-    payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/")
-    with open(os.path.join(HERE, "template.html"), encoding="utf-8") as f:
-        html = f.read()
-    with open(os.path.join(HERE, "index.html"), "w", encoding="utf-8") as f:
-        f.write('<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n')
-        f.write(html.replace("/*__DATA__*/null", payload))
+    write_page(data)
     print(f"Week {week}: {len(slate)} picks, {len(data['allowed'])} defenses, "
           f"{len(usage)} players, {len(data['log'])} log rows. Refreshed {refreshed}")
 

@@ -1,6 +1,10 @@
 <title>NFL TD Board</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Each NFL player's chance of a touchdown this week, from red-zone role, snaps and the betting line.">
+<meta name="theme-color" content="#123a2b" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b2118" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23123a2b'/%3E%3Ctext x='16' y='22' font-family='Arial Narrow,Arial,sans-serif' font-weight='700' font-size='15' text-anchor='middle' fill='%23eaf3ec'%3ETD%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
 <style>
@@ -42,6 +46,7 @@ h1 { font: 700 34px/1 var(--display); letter-spacing: .01em; margin: 0; text-tra
 #update-btn:focus-visible { outline-color: var(--band-fg); }
 nav.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--band); border-bottom: 1px solid var(--line); }
 .tabrow { display: flex; gap: 2px; overflow-x: auto; padding-top: 8px; }
+.tabrow::-webkit-scrollbar { display: none; }
 .tabrow button { flex: none; background: none; border: 0; color: var(--band-muted); cursor: pointer; font: 600 18px/1 var(--display); letter-spacing: .03em; padding: 10px 14px 11px; text-transform: uppercase; border-radius: 4px 4px 0 0; }
 .tabrow button:hover { color: var(--band-fg); }
 .tabrow button[aria-selected="true"] { background: var(--bg); color: var(--fg); }
@@ -49,7 +54,10 @@ main { padding-block: 20px 48px; }
 h2 { font: 700 24px/1.1 var(--display); letter-spacing: .02em; margin: 0; text-transform: uppercase; text-wrap: balance; }
 h3 { font: 600 17px/1.1 var(--display); letter-spacing: .03em; margin: 0; text-transform: uppercase; }
 .stack { display: flex; flex-direction: column; gap: 20px; }
-.hint { color: var(--muted); font-size: 13.5px; max-width: 72ch; margin: 4px 0 0; }
+.hint { color: var(--muted); font-size: 14px; max-width: 68ch; margin: 4px 0 0; }
+details.how { color: var(--muted); font-size: 14px; max-width: 68ch; margin-top: 6px; }
+details.how summary { color: var(--accent); cursor: pointer; font-weight: 600; width: fit-content; }
+details.how p { margin: 6px 0 0; }
 button, select, input { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -65,7 +73,9 @@ select, input[type="search"] { background: var(--surface); border: 1px solid var
 .chip .s { color: var(--star); }
 .flag { display: inline-block; font: 600 12px/1 var(--body); color: var(--accent); border: 1px solid currentColor; border-radius: 3px; padding: 2px 4px; margin-left: 3px; vertical-align: middle; white-space: nowrap; }
 .flag.bad { color: var(--bad); }
-.mini.results { min-width: 100%; } .mini.results td, .mini.results th { padding: 6px 10px; white-space: nowrap; }
+.flag.quiet { color: var(--muted); }
+.mini.results { min-width: 100%; } .mini.results td, .mini.results th, .mini.results td:first-child, .mini.results th:first-child { padding: 7px 12px; white-space: nowrap; }
+.mini.results td.note { color: var(--muted); font-size: 13px; }
 .adjust { padding: 0 12px 9px; font-size: 13.5px; color: var(--muted); }
 .RB { --c: var(--rb); } .WR { --c: var(--wr); } .TE { --c: var(--te); } .QB { --c: var(--qb); } .DST { --c: var(--dst); }
 
@@ -83,7 +93,18 @@ select, input[type="search"] { background: var(--surface); border: 1px solid var
 .kick span { color: var(--muted); font-size: 13.5px; }
 .game { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .game + .game { margin-top: 8px; }
-.pr { display: grid; grid-template-columns: 92px 74px minmax(0, 1fr) 96px 70px 44px 56px 72px 20px; gap: 10px; align-items: center; width: 100%; padding: 8px 12px; background: none; border: 0; border-top: 1px solid var(--line); text-align: left; cursor: pointer; }
+.priced { display: flex; align-items: stretch; }
+.priced > .pr { flex: 1; min-width: 0; }
+.price { display: flex; flex-direction: column; justify-content: center; gap: 3px; width: 132px; padding: 6px 10px; border-left: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+.price input { width: 100%; font: 600 14px var(--body); color: var(--fg); background: var(--sunken); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; }
+.price input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.price output { min-height: 15px; font-weight: 600; white-space: nowrap; }
+.price output.pos { color: var(--accent); } .price output.neg { color: var(--bad); }
+.price.inline { flex-direction: row; align-items: center; gap: 8px; width: auto; padding: 0; border: 0; font-size: inherit; }
+.price.inline input { width: 84px; }
+.pr.head.priced-head { grid-template-columns: 92px 74px minmax(0, 1fr) 132px 70px 48px 60px 72px 20px 122px; }
+.priced .price > span { display: none; }
+.pr { display: grid; grid-template-columns: 92px 74px minmax(0, 1fr) 132px 70px 48px 60px 72px 20px; gap: 10px; align-items: center; width: 100%; padding: 8px 12px; background: none; border: 0; border-top: 1px solid var(--line); text-align: left; cursor: pointer; }
 .game .pr:first-child { border-top: 0; }
 .pr:hover { background: var(--sunken); }
 .pr.head { cursor: default; background: var(--sunken); color: var(--muted); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; padding-block: 5px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 8px; }
@@ -91,7 +112,11 @@ select, input[type="search"] { background: var(--surface); border: 1px solid var
 .pr .team em { font: 500 14px var(--display); color: var(--muted); margin-left: 4px; font-style: normal; }
 .pr .who { font-weight: 600; min-width: 0; }
 .pr .num { text-align: right; }
-.pr .conf { display: grid; gap: 3px; font-weight: 600; font-size: 14px; }
+.pr .conf { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 3px 8px; }
+.conf .big { font: 700 23px/1 var(--display); letter-spacing: .01em; }
+.conf .odds { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.conf .meter { grid-column: 1 / -1; }
+.pr.done .who, .pr.done .conf .big, .pr.done .team { color: var(--muted); }
 .lbl { display: none; color: var(--muted); font-size: 12px; font-weight: 400; }
 .neg { color: var(--bad); font-weight: 700; } .pos { color: var(--good); font-weight: 700; }
 .chev { color: var(--muted); transition: transform .12s; }
@@ -112,6 +137,7 @@ select, input[type="search"] { background: var(--surface); border: 1px solid var
 .bar-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; align-items: center; }
 .bar-pair { display: grid; gap: 2px; position: relative; }
 .bar { display: flex; align-items: center; gap: 5px; font-size: 13px; height: 16px; }
+.bar b { position: relative; z-index: 1; background: var(--surface); border-radius: 2px; font-weight: 600; padding: 0 3px; margin-left: -2px; }
 .bar i { display: block; height: 100%; min-width: 2px; border-radius: 0 2px 2px 0; }
 .bar.o i { background: var(--accent); } .bar.d i { background: var(--muted); }
 .avg { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px dashed var(--fg); }
@@ -131,6 +157,7 @@ select, input[type="search"] { background: var(--surface); border: 1px solid var
 table.data { border-collapse: collapse; width: 100%; font-size: 14px; }
 table.data th { position: sticky; top: 0; background: var(--sunken); color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .03em; padding: 0; text-align: right; white-space: nowrap; }
 table.data th button { all: unset; display: block; cursor: pointer; padding: 7px 9px; }
+table.data th span { display: block; padding: 7px 9px; }
 table.data th button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 table.data th[aria-sort="ascending"] button::after { content: " ▲"; }
 table.data th[aria-sort="descending"] button::after { content: " ▼"; }
@@ -145,7 +172,14 @@ table.data td.extra { white-space: normal; background: var(--sunken); text-align
 .empty { padding: 24px; color: var(--muted); text-align: center; }
 
 @media (max-width: 860px) {
+  nav.tabs .tabrow { scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent); padding-right: 28px; }
+  .seg button { padding: 9px 12px; } select, input[type="search"] { padding: 9px 10px; }
+  .updater { margin-left: 0; width: 100%; justify-content: space-between; }
   .pr.head { display: none; }
+  .priced { flex-direction: column; }
+  .priced .price > span { display: inline; }
+  .price { flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; width: auto; padding: 6px 12px 8px; border-left: 0; border-top: 1px solid var(--line); }
+  .price input { width: 96px; min-height: 36px; }
   .pr { grid-template-columns: 72px 1fr auto; grid-template-areas: "team who chev" "pick conf conf" "stats stats stats"; gap: 7px 10px; }
   .pr .team { grid-area: team; } .pr .who { grid-area: who; } .pr .chev { grid-area: chev; }
   .pr .pk { grid-area: pick; } .pr .conf { grid-area: conf; }
@@ -159,10 +193,10 @@ table.data td.extra { white-space: normal; background: var(--sunken); text-align
 <header class="top gutter"><div class="wrap brand">
   <h1>NFL TD Board</h1>
   <small id="stamp"></small>
-  <div class="updater"><span id="update-status" role="status"></span><button id="update-btn" type="button">Update data/matchups</button></div>
+  <div class="updater"><span id="update-status" role="status"></span><button id="update-btn" type="button" title="Pull the latest sheet, injuries and betting lines now">Update now</button></div>
 </div></header>
 <nav class="tabs gutter" aria-label="Views"><div class="wrap tabrow" id="tabs" role="tablist"></div></nav>
-<main class="gutter"><div class="wrap stack" id="view"></div></main>
+<main class="gutter"><div class="wrap stack" id="view" role="tabpanel" aria-label="Board"></div></main>
 
 <script>
 let D = /*__DATA__*/null;
@@ -172,21 +206,42 @@ try {
   const saved = JSON.parse(localStorage.getItem(SAVED_KEY));
   if (saved && refreshedAt(saved) >= refreshedAt(D)) {
     const newerInjuries = (saved.injuriesAt || "") > (D.injuriesAt || "") ? saved : D;
-    D = { ...saved, results: D.results, recent: D.recent, model: D.model, lines: newerInjuries.lines, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
+    D = { ...saved, season: D.season, results: D.results, recent: D.recent, model: D.model, lines: newerInjuries.lines, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
   } else localStorage.removeItem(SAVED_KEY);
 } catch (e) { /* Storage is optional; the data built into the page still works. */ }
 
-/* ---- Player scoring: model.json holds coefficients and held-out tier hit rates. ---- */
+/* ---- Player scoring: model.json holds the fitted model. build.py repeats this section; tests/test_build.py checks they agree. ---- */
 const UNAVAILABLE = { "Out": "out", "Doubtful": "doubtful", "Injured Reserve": "on injured reserve", "Suspension": "suspended" };
-const LEAGUE_AVG_POINTS = 23;
+const POS = ["RB", "WR", "TE", "QB"];
+const LEAGUE_AVG_POINTS = 23, TEAM_FIRST_CAP = 0.9;
 function normName(name) { // Keep in step with norm_name in build.py.
   return name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[.'’\-]/g, "")
     .trim().replace(/\s+(jr|sr|ii|iii|iv|v)$/, "").replace(/\s+/g, " ");
 }
 const injuryStatus = (team, player) => (D.injuries || {})[`${team}|${normName(player || "")}`] || "";
 const sigmoid = x => 1 / (1 + Math.exp(-x));
-const predict = (c, f) => sigmoid(c.intercept + D.model.features.reduce((a, k) => a + c[k] * f[k], 0));
-const tierFor = (tiers, p) => tiers.reduce((best, t) => p >= t.min ? t : best, tiers[0]);
+function calibrate(curve, p) { // The model's raw number, turned into how often it came true out of sample.
+  const { x, y } = curve;
+  if (p <= x[0]) return y[0];
+  for (let i = 1; i < x.length; i++) if (p <= x[i]) return y[i - 1] + (y[i] - y[i - 1]) * (p - x[i - 1]) / (x[i] - x[i - 1]);
+  return y[y.length - 1];
+}
+function modelInputs(u, x, imp, missrz) {
+  const base = { oppg: ((u.targets || 0) + (u.carries || 0)) / x.gp, rzsh: u.rz_opp_share || 0, i10sh: u.i10_opp_share || 0, snaplast: x.lastPlayed || 0, imp, missrz };
+  POS.forEach(p => { base["is" + p] = +(u.pos === p); });
+  return Object.fromEntries(D.model.features.map(f => [f, f.startsWith("sqrt_") ? Math.sqrt(Math.max(base[f.slice(5)], 0)) : base[f]]));
+}
+const rawChance = (c, f) => sigmoid(c.intercept + D.model.features.reduce((a, k) => a + c[k] * f[k], 0));
+function fairOdds(p) { // The American odds at which a bet with this chance breaks even.
+  if (!(p > 0 && p < 1)) return null;
+  return p >= 0.5 ? Math.round(-100 * p / (1 - p)) : Math.round(100 * (1 - p) / p);
+}
+function kickoffIso(day, time) { // Eastern time, which is 4 hours behind UTC during daylight saving and 5 otherwise.
+  const [y, m, d] = day.split("-").map(Number);
+  const sunday = (month, n) => 1 + (7 - new Date(Date.UTC(y, month - 1, 1)).getUTCDay()) % 7 + 7 * (n - 1);
+  const daylight = (m > 3 || (m === 3 && d >= sunday(3, 2))) && (m < 11 || (m === 11 && d < sunday(11, 1)));
+  return `${day}T${time}:00${daylight ? "-04:00" : "-05:00"}`;
+}
 const hasStarted = line => !!line && (line.final || Date.now() >= new Date(line.kickoff).getTime());
 function starterScore(rz, x, first) { // Keep in step with starter_score in build.py.
   return (rz + 2 * x.tds + 3 * first) / x.gp * (0.6 * (x.lastPlayed || 0) + 0.4 * (x.avgSnap || 0));
@@ -200,33 +255,47 @@ function choosePick(sheetPlayer, position, teamPlayers) { // Keep in step with c
   const clear = best !== sheet && best.starter >= 1.25 * sheet.starter && best.lastPlayed >= sheet.lastPlayed + 0.10 && best.rzPerGame >= sheet.rzPerGame;
   return clear ? best : sheet;
 }
-function scorePlayers() {
+function scorePlayers() { // Keep in step with score_players in build.py.
   const firsts = {};
   D.log.forEach(l => { if (l["Team 1st TD Scorer"]) { const k = l.Team + "|" + l["Team 1st TD Scorer"]; firsts[k] = (firsts[k] || 0) + 1; } });
-  const lines = D.lines || {}, rows = {};
+  const lines = D.lines || {}, rows = {}, model = D.model && D.model.anyCal ? D.model : null;
   D.slate.forEach(r => { rows[r.team] = r; });
   D.players = [];
-  if (D.model) for (const u of D.usage) {
+  const listed = [], missing = {}; // missing: players who are out, by team and position.
+  if (model) for (const u of D.usage) {
     const slate = rows[u.team], x = ((D.recent || {})[u.team] || {})[u.player];
-    if (!slate || !x || x.gp < 2 || !["RB", "WR", "TE", "QB"].includes(u.pos)) continue;
-    const line = lines[u.team], imp = line ? line.imp : LEAGUE_AVG_POINTS;
-    const f = { oppg: ((u.targets || 0) + (u.carries || 0)) / x.gp, rzsh: u.rz_opp_share || 0, i10sh: u.i10_opp_share || 0, snaplast: x.lastPlayed || 0, imp,
-      isRB: +(u.pos === "RB"), isWR: +(u.pos === "WR"), isTE: +(u.pos === "TE"), isQB: +(u.pos === "QB") };
-    const status = injuryStatus(u.team, u.player), pAny = predict(D.model.any, f), pFirst = predict(D.model.first, f);
-    const firstTier = tierFor(D.model.firstTiers, pFirst), rz = (u.rz_targets || 0) + (u.rz_carries || 0);
-    D.players.push({ player: u.player, team: u.team, opp: slate.opp, pos: u.pos, day: slate.day, kick: slate.kick, imp, hasLine: !!line, started: hasStarted(line),
-      rzsh: f.rzsh, i10sh: f.i10sh, snap: x.last, missedLast: !x.last, status, unavailable: !!UNAVAILABLE[status] || (!x.recent && status !== "Active"),
-      lastPlayed: x.lastPlayed || 0, rzPerGame: rz / x.gp, starter: starterScore(rz, x, firsts[u.team + "|" + u.player] || 0),
-      pAny, pFirst, anyRate: tierFor(D.model.anyTiers, pAny).hit, firstRate: firstTier.hit, gameRate: firstTier.game,
-      rz: `${rz} (${Math.round(f.rzsh * 100)}%)`, tds: x.tds, first: firsts[u.team + "|" + u.player] || 0 });
+    if (!slate || !x || x.gp < 2 || !POS.includes(u.pos)) continue;
+    const status = injuryStatus(u.team, u.player), unavailable = !!UNAVAILABLE[status] || (!x.recent && status !== "Active");
+    if (unavailable) (missing[u.team + "|" + u.pos] ??= []).push(u);
+    listed.push({ u, x, slate, status, unavailable });
   }
-  D.players.sort((a, b) => b.pAny - a.pAny);
+  for (const { u, x, slate, status, unavailable } of listed) {
+    // A player's chance rises when a teammate at their position is out. Their own absence doesn't count.
+    const out = (missing[u.team + "|" + u.pos] || []).filter(m => m !== u), missrz = out.reduce((a, m) => a + (m.rz_opp_share || 0), 0);
+    const line = lines[u.team], imp = line ? line.imp : LEAGUE_AVG_POINTS, f = modelInputs(u, x, imp, missrz);
+    const rz = (u.rz_targets || 0) + (u.rz_carries || 0);
+    D.players.push({ player: u.player, team: u.team, opp: slate.opp, pos: u.pos, day: slate.day, kick: slate.kick, imp, hasLine: !!line, started: hasStarted(line),
+      rzsh: u.rz_opp_share || 0, i10sh: u.i10_opp_share || 0, snap: x.last, missedLast: !x.last, status, unavailable, missrz, covering: out.filter(m => (m.rz_opp_share || 0) >= 0.05).map(m => m.player),
+      lastPlayed: x.lastPlayed || 0, rzPerGame: rz / x.gp, starter: starterScore(rz, x, firsts[u.team + "|" + u.player] || 0),
+      rawAny: rawChance(model.any, f), anyRate: calibrate(model.anyCal, rawChance(model.any, f)), firstRate: calibrate(model.firstCal, rawChance(model.first, f)),
+      rz: `${rz} (${Math.round((u.rz_opp_share || 0) * 100)}%)`, tds: x.tds, first: firsts[u.team + "|" + u.player] || 0 });
+  }
+  // One team's first TD goes to one player, so a team's chances can't add up to more than the cap.
+  const totals = {};
+  D.players.forEach(p => { if (!p.unavailable) totals[p.team] = (totals[p.team] || 0) + p.firstRate; });
+  for (const p of D.players) {
+    if (totals[p.team] > TEAM_FIRST_CAP) p.firstRate *= TEAM_FIRST_CAP / totals[p.team];
+    // The game's first TD: the player scores their team's first, and their team scores before the other one.
+    const line = lines[p.team], teamFirst = line ? sigmoid(model.gameFirstSlope * line.margin) : 0.5;
+    p.gameRate = Math.min(p.firstRate, p.firstRate * teamFirst * model.gameFirstScale);
+  }
+  D.players.sort((a, b) => b.anyRate - a.anyRate || b.rawAny - a.rawAny); // Players at the top of the scale share a chance; the model's own number orders them.
   for (const r of D.slate) {
     r.sheetPlayer = r.player; r.sheetGameFirst = r.gameFirst; r.pos = r.pick.split(" ")[0];
     r.status = injuryStatus(r.team, r.player);
     const line = lines[r.team];
     r.imp = line ? line.imp : null; r.started = hasStarted(line);
-    if (line && D.model) { r.gameFirst = Math.round(sigmoid(D.model.gameFirstSlope * line.margin) * 100) + "%"; r.gameFirstVegas = true; }
+    if (line && model) { r.gameFirst = Math.round(sigmoid(model.gameFirstSlope * line.margin) * 100) + "%"; r.gameFirstVegas = true; }
     const mine = D.players.filter(p => p.team === r.team), best = choosePick(r.player, r.pos, mine);
     const sheet = mine.find(p => p.player === r.player);
     if (!best) {
@@ -241,7 +310,7 @@ function scorePlayers() {
     }
     const next = mine.filter(p => p.pos === r.pos && !p.unavailable && p !== best).sort((a, b) => b.starter - a.starter)[0];
     Object.assign(r, { player: best.player, status: best.status, rz: best.rz, tds: best.tds, first: best.first, rzsh: best.rzsh,
-      firstRate: best.firstRate, gameRate: best.gameRate, pFirst: best.pFirst, missedLast: best.missedLast,
+      firstRate: best.firstRate, gameRate: best.gameRate, missedLast: best.missedLast,
       alt: next ? `${next.player} (${next.rz} red zone)` : "None" });
   }
 }
@@ -250,7 +319,6 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const pct = v => v == null || v === "" ? "–" : Math.round(v * 100) + "%";
 const fix = (v, n = 2) => v == null || v === "" ? "–" : Number(v).toFixed(n);
-const POS = ["RB", "WR", "TE", "QB"];
 const nick = a => D.nicks[a] || a;
 const byTeam = (arr, key = "Team") => Object.fromEntries(arr.map(r => [r[key], r]));
 const allowed = byTeam(D.allowed), fScored = byTeam(D.firstScored), fAllowed = byTeam(D.firstAllowed);
@@ -261,7 +329,7 @@ const state = { tab: "plays", day: "All", pos: "All", open: null, game: null, pl
 
 const games = [];
 for (let i = 0; i < D.slate.length; i += 2) games.push([D.slate[i], D.slate[i + 1]]);
-state.game = games[0][0].team;
+state.game = (games.find(g => !g[0].started) || games[0])[0].team; // Open on the next game to kick off.
 
 function chip(pick) {
   const [pos, star] = String(pick || "").split(" ");
@@ -284,12 +352,21 @@ function mixBar(label, s) {
 const TABS = [["plays", "Top TD Plays"], ["picks", "1st TD Picks"], ["matchups", "Matchups"], ["defenses", "TDs Allowed"], ["players", "Player Usage"], ["log", "1st TD Log"], ["results", "Results"]];
 function go(tab, extra) {
   state.tab = tab; Object.assign(state, extra || {});
+  try { history.replaceState(null, "", "#" + tab); } catch (e) { /* The address is a convenience only. */ }
   render(); scrollTo(0, 0);
 }
 function renderTabs() {
-  $("#tabs").innerHTML = TABS.map(([k, l]) => `<button role="tab" aria-selected="${state.tab === k}" data-tab="${k}">${l}</button>`).join("");
+  $("#tabs").innerHTML = TABS.map(([k, l]) => `<button role="tab" aria-selected="${state.tab === k}" tabindex="${state.tab === k ? 0 : -1}" data-tab="${k}">${l}</button>`).join("");
+  const current = $('#tabs [aria-selected="true"]');
+  if (current && current.scrollIntoView) current.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 $("#tabs").onclick = e => { const t = e.target.dataset.tab; if (t) go(t); };
+$("#tabs").onkeydown = e => { // Arrow keys move between tabs.
+  const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key]; if (!step) return;
+  const i = TABS.findIndex(t => t[0] === state.tab);
+  go(TABS[(i + step + TABS.length) % TABS.length][0]);
+  $('#tabs [aria-selected="true"]').focus();
+};
 
 function seg(name, opts, cur) {
   return `<div class="seg" role="group" aria-label="${name}">${opts.map(o =>
@@ -303,38 +380,69 @@ const statusTag = r => r.status === "Active" && r.missedLast ? `<span class="fla
 const lowRoleTag = r => r.rzsh != null && r.rzsh < 0.05 ? `<span class="flag bad">Small red-zone role</span>` : "";
 const changedCount = () => D.slate.filter(r => r.player !== r.sheetPlayer).length;
 const changedTag = r => r.player !== r.sheetPlayer ? `<span class="flag">Player changed</span>` : "";
-const startedTag = r => r.started ? `<span class="flag">Started</span>` : "";
+const startedTag = r => r.started ? `<span class="flag quiet">Started</span>` : "";
+const oddsText = p => { const o = fairOdds(p); return o == null ? "" : (o > 0 ? "+" : "−") + Math.abs(o); };
+const chance = p => `<span class="conf"><span class="big">${pctText(p)}</span><span class="odds">${p == null ? "" : "fair " + oddsText(p)}</span><span class="meter"><i style="width:${(p || 0) * 100}%"></i></span></span>`;
+const coveringTag = p => p.covering && p.covering.length ? `<span class="flag" title="${esc(p.covering.join(", "))} out">Bigger role: ${esc(p.covering[0])}${p.covering.length > 1 ? ` +${p.covering.length - 1}` : ""} out</span>` : "";
+/* The sportsbook's odds, typed in by the reader and kept in this browser for the week. */
+const PRICES_KEY = "td-board-prices";
+let prices = {};
+try { const saved = JSON.parse(localStorage.getItem(PRICES_KEY)); if (saved && saved.week === D.week && saved.season === D.season) prices = saved.prices || {}; } catch (e) { /* Storage is optional. */ }
+function parseOdds(text) { // "+150", "150" and "-120" are American odds; anything else isn't a price.
+  const m = /^([+\-−]?)(\d{3,5})$/.exec(String(text).trim()); if (!m) return null;
+  return (m[1] === "-" || m[1] === "−" ? -1 : 1) * +m[2];
+}
+function betValue(p, odds) { // Average profit per dollar staked, if the app's chance is right.
+  const win = odds > 0 ? odds / 100 : 100 / -odds;
+  return p * win - (1 - p);
+}
+function verdict(p, text) {
+  if (!String(text || "").trim()) return ["", ""];
+  const odds = parseOdds(text);
+  if (odds == null || !(p > 0)) return ["Try +150 or −120", ""];
+  const v = betValue(p, odds), pc = Math.abs(Math.round(v * 100));
+  return v > 0.005 ? [`Good value +${pc}%`, "pos"] : v < -0.005 ? [`Poor value −${pc}%`, "neg"] : ["Fair price", ""];
+}
+function priceBox(kind, p, team, player, inline) {
+  const key = `${kind}|${team}|${player}`, [text, cls] = verdict(p, prices[key]);
+  return `<label class="price ${inline ? "inline" : ""}"><span>${inline ? "Book odds for game's 1st TD" : "Book odds"}</span><input type="text" inputmode="text" autocomplete="off" placeholder="+150" maxlength="6" data-price="${esc(key)}" data-p="${p || 0}" value="${esc(prices[key] || "")}" aria-label="Sportsbook odds for ${esc(player)}"><output class="${cls}">${text}</output></label>`;
+}
+const BANDS = [[0.5, "50% or better"], [0.4, "40 to 49%"], [0.3, "30 to 39%"], [0.2, "20 to 29%"], [0, "Under 20%"]];
+const bandOf = p => BANDS.find(b => p >= b[0])[1];
+const how = text => `<details class="how"><summary>How to read this</summary><p>${text}</p></details>`;
+const ODDS_NOTE = "Fair odds are the break-even price: a bet is only worth making if the sportsbook pays more than that. Type the sportsbook's odds in the box and the app says whether the bet is good or poor value, as average profit per dollar staked.";
 const injuriesWhen = () => D.injuriesAt ? ` (${new Date(D.injuriesAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })})` : "";
 
 /* ---- Top TD Plays ---- */
 function viewPlays() {
   const s = state.plays, days = ["All", ...new Set(D.slate.map(r => r.day))];
-  if (!D.players.length) return `<div><h2>Top TD plays, Week ${D.week}</h2><p class="hint">Player data couldn't be loaded, so this page is empty for now. Select Update data/matchups or check back after the next daily refresh.</p></div>`;
-  const hiddenStarted = D.players.filter(p => p.started && !p.unavailable).length;
-  const list = D.players.filter(p => !p.unavailable && (s.started || !p.started) && (s.pos === "All" || p.pos === s.pos) && (s.day === "All" || p.day === s.day)).slice(0, 40);
+  if (!D.players.length) return `<div><h2>Top TD plays, Week ${D.week}</h2><p class="hint">Player data couldn't be loaded, so this page is empty for now. Select Update now or check back after the next daily refresh.</p></div>`;
+  const healthy = D.players.filter(p => !p.unavailable), allStarted = healthy.every(p => p.started), showStarted = s.started || allStarted;
+  const list = healthy.filter(p => (showStarted || !p.started) && (s.pos === "All" || p.pos === s.pos) && (s.day === "All" || p.day === s.day)).slice(0, 40);
   let html = `<div><h2>Top TD plays, Week ${D.week}</h2>
-    <p class="hint">Every player ranked by chance to score any touchdown, using red-zone share, inside-the-10 share, touches, snaps and projected team points. Each tier shows how often similar players scored when tested on a season the model didn't train on. Injuries checked${injuriesWhen()}. Check game-day inactives before betting.</p></div>
+    <p class="hint">Each player's chance to score a touchdown this week. Injuries checked${injuriesWhen()}. Check game-day inactives before betting.</p>
+    ${how(`The chance comes from the player's share of red-zone and inside-the-10 chances, touches per game, snaps, the team's projected points, and whether a teammate at the same position is out. It was checked on ${D.model.sample.playerGames.toLocaleString()} player games from seasons the model wasn't built on, and the Results tab shows how close it came. ${ODDS_NOTE} A passing TD doesn't count for the quarterback.`)}</div>
     <div class="filters">${seg("playday", days, s.day)}${seg("playpos", ["All", ...POS], s.pos)}
-      <div class="seg"><button data-playstarted aria-pressed="${s.started}">Include started games</button></div></div>
+      ${allStarted ? `<span class="count">Every game this week has kicked off.</span>` : `<div class="seg"><button data-playstarted aria-pressed="${s.started}">Include started games</button></div>`}</div>
     <div>
-    <div class="pr head"><span>Team</span><span>Pos</span><span>Player</span><span>Any TD</span><span class="num">RZ share</span><span class="num">In 10</span><span class="num">Team pts</span><span class="num">Snaps</span><span></span></div>`;
+    <div class="pr head priced-head"><span>Team</span><span>Pos</span><span>Player</span><span>Any TD chance</span><span class="num">RZ share</span><span class="num">In 10</span><span class="num">Team pts</span><span class="num">Snaps</span><span></span><span>Book odds</span></div>`;
   let last = null;
   for (const p of list) {
-    if (pctText(p.anyRate) !== last) { html += `<div class="kick" style="margin-top:${last === null ? 0 : 14}px"><h3>About ${pctText(p.anyRate)} score a TD</h3></div>`; last = pctText(p.anyRate); }
-    html += `<div class="game"><button class="pr" data-game="${esc(p.team)}">
+    if (bandOf(p.anyRate) !== last) { html += `<div class="kick" style="margin-top:${last === null ? 0 : 14}px"><h3>${bandOf(p.anyRate)}</h3></div>`; last = bandOf(p.anyRate); }
+    html += `<div class="game priced"><button class="pr ${p.started ? "done" : ""}" data-game="${esc(p.team)}">
       <span class="team">${esc(p.team)}<em>${esc(p.opp)}</em></span>
       <span class="pk"><span class="chip ${esc(p.pos)}">${esc(p.pos)}</span></span>
-      <span class="who">${esc(p.player)} ${statusTag(p)}${startedTag(p)}</span>
-      <span class="conf"><span>${pctText(p.anyRate)}</span><span class="meter"><i style="width:${p.anyRate * 100}%"></i></span></span>
+      <span class="who">${esc(p.player)} ${statusTag(p)}${coveringTag(p)}${startedTag(p)}</span>
+      ${chance(p.anyRate)}
       <span class="statline">
         <span class="num rz"><span class="lbl">RZ share </span>${pctText(p.rzsh)}</span>
         <span class="num td"><span class="lbl">In 10 </span>${pctText(p.i10sh)}</span>
         <span class="num fst"><span class="lbl">Team pts </span>${p.hasLine ? p.imp.toFixed(1) : "–"}</span>
         <span class="num gf"><span class="lbl">Snaps </span>${pctText(p.snap)}</span>
       </span>
-      <span class="chev" aria-hidden="true">›</span></button></div>`;
+      <span class="chev" aria-hidden="true">›</span></button>${priceBox("any", p.anyRate, p.team, p.player)}</div>`;
   }
-  if (!list.length) html += `<div class="empty">${hiddenStarted && !s.started ? "No upcoming games match. Select Include started games to see them." : "No players match these filters."}</div>`;
+  if (!list.length) html += `<div class="empty">${!showStarted && healthy.some(p => p.started) ? "No upcoming games match. Select Include started games to see them." : "No players match these filters."}</div>`;
   return html + "</div>";
 }
 
@@ -343,21 +451,22 @@ function viewPicks() {
   const days = ["All", ...new Set(D.slate.map(r => r.day))];
   const match = r => state.pos === "All" || r.pos === state.pos;
   const shown = games.filter(g => (state.day === "All" || g[0].day === state.day) && g.some(match));
-  const top = [...D.slate].filter(r => r.pFirst != null && !r.started).sort((a, b) => b.pFirst - a.pFirst).slice(0, 8);
+  const top = [...D.slate].filter(r => r.firstRate != null && !r.started).sort((a, b) => b.firstRate - a.firstRate).slice(0, 8);
   let html = `<section class="stack" style="gap:10px"><div><h2>First TD picks, Week ${D.week}</h2>
-    <p class="hint">Your sheet picks the position for each team's first touchdown. The app then names that position's healthy starter: injured players are removed, and a starter who's off the injury report comes back in. ${changedCount()} players changed from your sheet this week. Rates show how often similar players scored first when tested on a season the model didn't train on, and even the best land less than half the time. Injuries checked${injuriesWhen()}. Check game-day inactives before betting.</p></div>
+    <p class="hint">Your sheet picks the position for each team's first touchdown, and the app names that position's healthy starter. ${changedCount()} ${changedCount() === 1 ? "player" : "players"} changed from your sheet this week. Injuries checked${injuriesWhen()}.</p>
+    ${how(`Injured players are removed, and a starter who's off the injury report comes back in. The chance shown is how often players in the same role scored their team's first TD in seasons the model wasn't built on. Even the best picks miss about two times in three. ${ODDS_NOTE} Scores 1st is the chance the team gets the game's first TD, from the point spread.`)}</div>
     ${top.length ? `<h3>Best first TD plays still to come</h3>
     <div class="tops">${top.map(t => `<button class="top-card" data-game="${esc(t.team)}">
       <div class="l1"><span>${esc(t.team)} ${esc(t.opp)}</span>${chip(t.pick)}</div>
       <div class="name">${esc(t.player)} ${statusTag(t)}${lowRoleTag(t)}</div>
       <div class="meter"><i style="width:${(t.firstRate || 0) * 100}%"></i></div>
-      <div class="l3"><span><b>${pctText(t.firstRate)}</b> team's 1st</span><span><b>${pctText(t.gameRate)}</b> game's 1st</span><span><b>${esc(t.rz)}</b> RZ</span></div>
+      <div class="l3"><span><b>${pctText(t.firstRate)}</b> team's 1st (fair ${oddsText(t.firstRate)})</span><span><b>${pctText(t.gameRate)}</b> game's 1st</span><span><b>${esc(t.rz)}</b> RZ</span></div>
     </button>`).join("")}</div>` : ""}</section>
   <section><div class="stack" style="gap:10px">
     <h3>Every team this week</h3>
     <div class="filters">${seg("day", days, state.day)}${seg("pos", ["All", ...POS], state.pos)}</div>
     <div>
-    <div class="pr head"><span>Team</span><span>Pos</span><span>Player</span><span>Team's 1st TD</span><span class="num">RZ opps</span><span class="num">TDs</span><span class="num">Team pts</span><span class="num">Scores 1st</span><span></span></div>`;
+    <div class="pr head"><span>Team</span><span>Pos</span><span>Player</span><span>Team's 1st TD chance</span><span class="num">RZ opps</span><span class="num">TDs</span><span class="num">Team pts</span><span class="num">Scores 1st</span><span></span></div>`;
   let lastKick = "";
   for (const g of shown) {
     const k = `${g[0].day} ${g[0].kick}`;
@@ -370,11 +479,11 @@ function viewPicks() {
 function pickRow(r) {
   const open = state.open === r.team;
   const gf = parseInt(r.gameFirst);
-  return `<button class="pr" data-open="${esc(r.team)}" aria-expanded="${open}">
+  return `<button class="pr ${r.started ? "done" : ""}" data-open="${esc(r.team)}" aria-expanded="${open}">
     <span class="team">${esc(r.team)}<em>${esc(r.opp)}</em></span>
     <span class="pk">${chip(r.pick)}</span>
     <span class="who">${esc(r.player)} ${statusTag(r)}${lowRoleTag(r)}${changedTag(r)}${startedTag(r)}</span>
-    <span class="conf"><span>${pctText(r.firstRate)}</span><span class="meter"><i style="width:${(r.firstRate || 0) * 100}%"></i></span></span>
+    ${chance(r.firstRate)}
     <span class="statline">
       <span class="num rz"><span class="lbl">RZ </span>${esc(r.rz)}</span>
       <span class="num td"><span class="lbl">TDs </span>${r.tds}</span>
@@ -388,7 +497,8 @@ function pickRow(r) {
     ${mixBar("Opponent allows 1st TD to, season", r.oppPos)}
     ${mixBar("Opponent allows, at this venue", r.oppVenue)}
     <div class="full"><span><b>Next option:</b> ${esc(r.alt)}</span>
-      <span><b>Chance of game's 1st TD:</b> ${pctText(r.gameRate)}</span>
+      <span><b>Chance of game's 1st TD:</b> ${pctText(r.gameRate)}${r.gameRate ? ` (fair ${oddsText(r.gameRate)})` : ""}</span>
+      ${r.gameRate ? priceBox("first", r.gameRate, r.team, r.player, true) : ""}
       <span class="${r.noTd >= 2 ? "neg" : ""}"><b>No-TD games:</b> ${r.noTd}</span>
       <button class="link" data-game="${esc(r.team)}">Open matchup</button></div>
   </div>` : ""}`;
@@ -420,16 +530,16 @@ function panel(r, o) {
     <div class="panel-head"><div><h2>${esc(nick(r.team))} offense</h2><div class="sub">vs ${esc(nick(o.team))} defense · ${gpO} and ${gpD} games${r.imp == null ? "" : ` · projected ${r.imp.toFixed(1)} points`}</div></div></div>
     <h3>All TDs by position, season</h3>
     <div class="bars">${POS.map(p => `<div class="bar-row"><span class="chip ${p}">${p}</span><div class="bar-pair">
-        <div class="bar o"><i style="width:${w(tot(off[p]))}%"></i>${tot(off[p])}</div>
-        <div class="bar d"><i style="width:${w(tot(dfn[p]))}%"></i>${tot(dfn[p])}</div>
+        <div class="bar o"><i style="width:${w(tot(off[p]))}%"></i><b>${tot(off[p])}</b></div>
+        <div class="bar d"><i style="width:${w(tot(dfn[p]))}%"></i><b>${tot(dfn[p])}</b></div>
         <span class="avg" style="left:${w(D.nflAvg[p])}%" title="NFL average ${D.nflAvg[p]}"></span>
       </div></div>`).join("")}</div>
     <div class="key"><span><i style="background:var(--accent)"></i>${esc(r.team)} rush + rec TDs</span><span><i style="background:var(--muted)"></i>${esc(o.team)} allowed</span><span>Dashed line: NFL average</span></div>
     <h3>First TDs by position, season</h3>
     <div class="mixes">${mixBar(`${r.team} 1st TDs`, r.teamPos)}${mixBar(`${o.team} allows 1st TD`, r.oppPos)}</div>
     <h3>Best TD plays on this team</h3>
-    <table class="mini"><thead><tr><th>Player</th><th>Any TD</th><th>Team's 1st</th><th>RZ share</th><th>In 10</th></tr></thead><tbody>
-      ${D.players.filter(p => p.team === r.team && !p.unavailable).slice(0, 4).map(p => `<tr><td><b>${esc(p.player)}</b> <span class="chip ${esc(p.pos)}">${esc(p.pos)}</span> ${statusTag(p)}</td><td>${pctText(p.anyRate)}</td><td>${pctText(p.firstRate)}</td><td>${pctText(p.rzsh)}</td><td>${pctText(p.i10sh)}</td></tr>`).join("")}
+    <table class="mini"><thead><tr><th>Player</th><th>Any TD</th><th>Fair odds</th><th>Team's 1st</th><th>RZ share</th><th>In 10</th></tr></thead><tbody>
+      ${D.players.filter(p => p.team === r.team && !p.unavailable).slice(0, 5).map(p => `<tr><td><b>${esc(p.player)}</b> <span class="chip ${esc(p.pos)}">${esc(p.pos)}</span> ${statusTag(p)}</td><td><b>${pctText(p.anyRate)}</b></td><td>${oddsText(p.anyRate)}</td><td>${pctText(p.firstRate)}</td><td>${pctText(p.rzsh)}</td><td>${pctText(p.i10sh)}</td></tr>`).join("")}
     </tbody></table>
     <div class="sub">Red-zone run rate: <b>${pct(t.rzRun)}</b> (inside 10: ${pct(t.i10Run)}). ${esc(o.team)} faces ${pct(t.oppRzRun)}. NFL average 46%, inside 10 52%.</div>
   </section>`;
@@ -444,7 +554,7 @@ function viewDefenses() {
   const { key, dir } = state.def;
   rows.sort((a, b) => (typeof a[key] === "string" ? String(a[key]).localeCompare(b[key]) : (a[key] ?? -1) - (b[key] ?? -1)) * dir);
   const heat = {}; DEF_COLS.forEach(([k, , f]) => { if (f === 2 || f === "p") heat[k] = Math.max(...rows.map(r => r[k] || 0)); });
-  return `<div><h2>TDs allowed by defense</h2><p class="hint">All touchdowns each defense has allowed this season, per game, except the last column, which is how often it allowed the game's first TD. Darker cells give up more. Use this as context: in testing it added almost nothing once player role and projected team points were known. Select a team to see the players it faces this week, or sort by any column.</p></div>
+  return `<div><h2>TDs allowed by defense</h2><p class="hint">All touchdowns each defense has allowed this season, per game, except the last column, which is how often it allowed the game's first TD. Darker cells give up more. Treat this as background: in testing, a defense's record added nothing once a player's role and the team's projected points were known. Select a team to see the players it faces this week, or sort by any column.</p></div>
   <div class="tablebox"><table class="data"><thead><tr>${DEF_COLS.map(([k, l, f]) =>
     `<th class="${f === "t" ? "t" : ""}" aria-sort="${key === k ? (dir > 0 ? "ascending" : "descending") : "none"}"><button data-defsort="${esc(k)}">${esc(l)}</button></th>`).join("")}</tr></thead>
   <tbody>${rows.map(r => {
@@ -452,7 +562,7 @@ function viewDefenses() {
       if (f === "t") return `<td class="t ${k === "Team" ? "strong" : ""}">${esc(r[k])}</td>`;
       if (f === 2 || f === "p") {
         const a = heat[k] ? Math.round((r[k] || 0) / heat[k] * 42) : 0;
-        return `<td style="background:color-mix(in srgb, var(--rb) ${a}%, transparent)">${f === 2 ? fix(r[k]) : pct(r[k])}</td>`;
+        return `<td style="background:color-mix(in srgb, var(--accent) ${a}%, transparent)">${f === 2 ? fix(r[k]) : pct(r[k])}</td>`;
       }
       return `<td>${r[k] ?? "–"}</td>`;
     }).join("");
@@ -476,7 +586,7 @@ function defDetail(r) {
 const playerLookup = Object.fromEntries(D.players.map(p => [p.team + "|" + p.player, p]));
 const firstCount = {};
 D.log.forEach(l => { if (l["Team 1st TD Scorer"]) { const k = l.Team + "|" + l["Team 1st TD Scorer"]; firstCount[k] = (firstCount[k] || 0) + 1; } });
-const PLY_COLS = [["player", "Player", "t"], ["team", "Team", "t"], ["pos", "Pos", "t"], ["estAny", "Any TD est.", "p"], ["status", "Injury", "t"], ["lastSnap", "Last game snaps", "p"], ["first", "Team 1st TDs"], ["rz_opp_share", "RZ opp %", "p"], ["rz_targets", "RZ tgt"], ["rz_carries", "RZ car"],
+const PLY_COLS = [["player", "Player", "t"], ["team", "Team", "t"], ["pos", "Pos", "t"], ["estAny", "Any TD chance", "p"], ["status", "Injury", "t"], ["lastSnap", "Last game snaps", "p"], ["first", "Team 1st TDs"], ["rz_opp_share", "RZ opp %", "p"], ["rz_targets", "RZ tgt"], ["rz_carries", "RZ car"],
   ["i10_opp_share", "In-10 opp %", "p"], ["i10_targets", "In-10 tgt"], ["i10_carries", "In-10 car"], ["opp_share", "Opp %", "p"], ["targets", "Tgt"], ["carries", "Car"]];
 function plyFiltered() {
   const { q, team, pos, key, dir } = state.ply; const needle = q.trim().toLowerCase();
@@ -502,39 +612,58 @@ function fillPlayers() {
 }
 
 /* ---- Results: recorded before kickoff, graded after the game. ---- */
-const record = (rows, field) => {
-  const hits = rows.filter(e => e[field] === true).length;
-  return { n: rows.length, hits, rate: rows.length ? hits / rows.length : null };
-};
+function record(rows, field, rateField) { // Hits, what the app expected, and the range luck alone would give.
+  const hits = rows.filter(e => e[field] === true).length, known = rateField && rows.every(e => typeof e[rateField] === "number");
+  const expected = known ? rows.reduce((a, e) => a + e[rateField], 0) : null;
+  const spread = known ? 2 * Math.sqrt(rows.reduce((a, e) => a + e[rateField] * (1 - e[rateField]), 0)) : null;
+  return { n: rows.length, hits, rate: rows.length ? hits / rows.length : null, expected,
+    low: known ? Math.max(0, Math.round(expected - spread)) : null, high: known ? Math.min(rows.length, Math.round(expected + spread)) : null };
+}
 const recordText = r => r.n ? `${r.hits} of ${r.n} (${pctText(r.rate)})` : "No results yet";
+const expectedText = r => !r.n || r.expected == null ? "–" : `${r.expected.toFixed(1)} (${pctText(r.expected / r.n)})`;
+const rangeText = r => !r.n || r.low == null ? "–" : r.hits < r.low ? `Below the normal range of ${r.low} to ${r.high}` : r.hits > r.high ? `Above the normal range of ${r.low} to ${r.high}` : `Within the normal range of ${r.low} to ${r.high}`;
+function testedTable(title, t, label) {
+  if (!t) return "";
+  const names = t.bands.map((b, i) => i === t.bands.length - 1 ? `${Math.round(b.min * 100)}% or better` : `${Math.round(b.min * 100)} to ${Math.round(t.bands[i + 1].min * 100)}%`);
+  return `<div><div class="mix-label">${title}</div><div class="tablebox"><table class="mini results"><thead><tr><th>App said</th><th>Average shown</th><th>${label}</th><th>Player games</th></tr></thead><tbody>
+    ${t.bands.map((b, i) => `<tr><td>${names[i]}</td><td>${(b.predicted * 100).toFixed(1)}%</td><td><b>${(b.actual * 100).toFixed(1)}%</b></td><td>${b.n.toLocaleString()}</td></tr>`).join("")}
+  </tbody></table></div></div>`;
+}
 function viewResults() {
-  const all = (D.results || {}).plays || [];
-  const intro = `<div><h2>Results</h2><p class="hint">How the app's plays did. Each play is recorded before its game kicks off and graded after the final, starting with the last game of Week 8. Earlier weeks aren't included because the model was built on them. Players who didn't play are left out of hit rates and listed separately. Early records are small samples, so a good or bad few weeks can be luck.</p></div>`;
-  if (!all.length) return intro + `<div class="empty">No plays recorded yet. They appear here before the next kickoff.</div>`;
-  const plays = all.filter(e => e.isPlay && e.anyTd !== undefined && e.played);
-  const tiers = [...new Set(all.filter(e => e.isPlay).map(e => pctText(e.anyRate)))].sort((a, b) => parseInt(b) - parseInt(a));
-  const firsts = field => { const rows = all.filter(e => e[field] && e.teamFirst !== undefined && e.played !== false); return { team: record(rows, "teamFirst"), game: record(rows, "gameFirst"), any: record(rows.filter(e => e.anyTd !== undefined), "anyTd") }; };
-  const app = firsts("isPick"), sheet = firsts("isSheet");
+  const all = (D.results || {}).plays || [], held = D.model.heldOut || {};
+  const intro = `<div><h2>Results</h2><p class="hint">How the app's plays did. Each play is recorded before its game kicks off and graded after the final. A few weeks is a small sample, so a good or bad run can be luck: the normal range shows how far luck alone would move the count.</p>
+    ${how("Plays have been recorded since the last game of Week 8. Players who didn't play are left out of hit rates and listed separately. Through Week 9 the app showed rounded tiers; from Week 10 it shows each player's own chance, so earlier rows carry the tier that was shown at the time. The normal range is where the count would land about 19 times in 20 if every chance shown were exactly right.")}</div>`;
+  const tested = `<section class="stack" style="gap:10px"><div><h3>How the model tested before going live</h3>
+    <p class="hint">Each season was scored by a model built only from the other seasons (${esc(D.model.sample.seasons)}; ${D.model.sample.playerGames.toLocaleString()} player games). If the two middle columns match, the chance shown can be trusted.</p></div>
+    <div class="vs">${testedTable("Any TD", held.any, "Actually scored")}${testedTable("Team's first TD", held.first, "Actually scored first")}</div></section>`;
+  if (!all.length) return intro + `<div class="empty">No plays recorded yet. They appear here before the next kickoff.</div>` + tested;
+  const graded = all.filter(e => e.isPlay && e.anyTd !== undefined && e.played);
+  const bands = BANDS.map(b => b[1]).filter(b => graded.some(e => bandOf(e.anyRate) === b));
+  const firsts = field => { const rows = all.filter(e => e[field] && e.teamFirst !== undefined && e.played !== false); return { team: record(rows, "teamFirst", "firstRate"), game: record(rows, "gameFirst", "gameRate"), any: record(rows.filter(e => e.anyTd !== undefined), "anyTd") }; };
+  const app = firsts("isPick"), sheet = firsts("isSheet"), total = record(graded, "anyTd", "anyRate");
   const pending = all.filter(e => (e.isPlay || e.isPick) && e.anyTd === undefined).length;
   const dnp = all.filter(e => e.isPlay && e.played === false).length;
   const weeks = [...new Set(all.map(e => e.week))].sort((a, b) => b - a);
   const shown = all.filter(e => (e.isPlay || e.isPick) && (state.resultsWeek === "All" || String(e.week) === state.resultsWeek))
     .sort((a, b) => b.week - a.week || (b.anyRate || 0) - (a.anyRate || 0));
   const mark = v => v === true ? '<span class="pos">Yes</span>' : v === false ? "No" : "Pending";
-  return intro + `<section class="stack" style="gap:10px"><h3>Any TD plays by tier</h3>
-    <div class="tablebox"><table class="mini results"><thead><tr><th>Tier tested at</th><th>Actual hit rate</th></tr></thead><tbody>
-      ${tiers.map(t => `<tr><td>About ${t}</td><td>${recordText(record(plays.filter(e => pctText(e.anyRate) === t), "anyTd"))}</td></tr>`).join("")}
+  const row = (name, r) => `<tr><td>${name}</td><td>${r.n}</td><td>${expectedText(r)}</td><td><b>${r.n ? `${r.hits} (${pctText(r.rate)})` : "–"}</b></td><td class="note">${rangeText(r)}</td></tr>`;
+  return intro + `<section class="stack" style="gap:10px"><h3>Any TD plays: expected vs. actual</h3>
+    <div class="tablebox"><table class="mini results"><thead><tr><th>Chance shown</th><th>Plays</th><th>Expected to score</th><th>Scored</th><th>Luck check</th></tr></thead><tbody>
+      ${bands.map(b => row(b, record(graded.filter(e => bandOf(e.anyRate) === b), "anyTd", "anyRate"))).join("")}
+      ${row("<b>All plays</b>", total)}
     </tbody></table></div>
     <p class="hint">${pending} plays waiting on a result. ${dnp} recorded players didn't play.</p></section>
   <section class="stack" style="gap:10px"><h3>First TD picks: app vs. your sheet</h3>
-    <div class="tablebox"><table class="mini results"><thead><tr><th>Pick came from</th><th>Team's 1st TD</th><th>Game's 1st TD</th><th>Any TD</th></tr></thead><tbody>
-      <tr><td>App</td><td>${recordText(app.team)}</td><td>${recordText(app.game)}</td><td>${recordText(app.any)}</td></tr>
-      <tr><td>Your sheet</td><td>${recordText(sheet.team)}</td><td>${recordText(sheet.game)}</td><td>${recordText(sheet.any)}</td></tr>
+    <div class="tablebox"><table class="mini results"><thead><tr><th>Pick came from</th><th>Team's 1st TD</th><th>Expected</th><th>Game's 1st TD</th><th>Any TD</th></tr></thead><tbody>
+      <tr><td>App</td><td><b>${recordText(app.team)}</b></td><td>${expectedText(app.team)}</td><td>${recordText(app.game)}</td><td>${recordText(app.any)}</td></tr>
+      <tr><td>Your sheet</td><td><b>${recordText(sheet.team)}</b></td><td>–</td><td>${recordText(sheet.game)}</td><td>${recordText(sheet.any)}</td></tr>
     </tbody></table></div></section>
+  ${tested}
   <section class="stack" style="gap:10px"><div class="filters"><h3>Every recorded play</h3>
     <select id="results-week" aria-label="Week"><option value="All">All weeks</option>${weeks.map(w => `<option value="${w}" ${String(w) === state.resultsWeek ? "selected" : ""}>Week ${w}</option>`).join("")}</select></div>
-    <div class="tablebox"><table class="data"><thead><tr><th class="t"><button>Wk</button></th><th class="t"><button>Player</button></th><th class="t"><button>Game</button></th><th><button>Any TD tier</button></th><th><button>Scored TD</button></th><th><button>Team's 1st</button></th><th><button>Game's 1st</button></th></tr></thead><tbody>
-      ${shown.map(e => `<tr><td class="t">${e.week}</td><td class="t" style="font-weight:600">${esc(e.player)} <span class="chip ${esc(e.pos)}">${esc(e.pos)}</span>${e.isPick ? '<span class="flag">1st TD pick</span>' : ""}${e.played === false ? '<span class="flag bad">Didn\u2019t play</span>' : ""}</td><td class="t">${esc(e.team)} ${esc(e.opp)}</td><td>${pctText(e.anyRate)}</td><td>${e.played === false ? "–" : mark(e.anyTd)}</td><td>${e.played === false ? "–" : mark(e.teamFirst)}</td><td>${e.played === false ? "–" : mark(e.gameFirst)}</td></tr>`).join("")}
+    <div class="tablebox"><table class="data"><thead><tr><th class="t"><span>Wk</span></th><th class="t"><span>Player</span></th><th class="t"><span>Game</span></th><th><span>Any TD chance</span></th><th><span>Scored TD</span></th><th><span>Team's 1st</span></th><th><span>Game's 1st</span></th></tr></thead><tbody>
+      ${shown.map(e => `<tr><td class="t">${e.week}</td><td class="t" style="font-weight:600">${esc(e.player)} <span class="chip ${esc(e.pos)}">${esc(e.pos)}</span>${e.isPick ? '<span class="flag">1st TD pick</span>' : ""}${e.played === false ? '<span class="flag bad">Didn’t play</span>' : ""}</td><td class="t">${esc(e.team)} ${esc(e.opp)}</td><td>${pctText(e.anyRate)}</td><td>${e.played === false ? "–" : mark(e.anyTd)}</td><td>${e.played === false ? "–" : mark(e.teamFirst)}</td><td>${e.played === false ? "–" : mark(e.gameFirst)}</td></tr>`).join("")}
     </tbody></table></div></section>`;
 }
 
@@ -552,7 +681,7 @@ function viewLog() {
     <select id="log-week" aria-label="Week"><option value="All">All weeks</option>${weeks.map(w => `<option value="${w}" ${String(w) === String(s.week) ? "selected" : ""}>Week ${w}</option>`).join("")}</select>
     ${seg("logpos", ["All", ...POS, "DEF/ST"], s.pos)}<span class="count">${rows.length} games</span></div>
   ${rows.length ? `<div style="max-width:520px">${mixBar("Position mix for this selection", mix)}</div>` : ""}
-  <div class="tablebox">${rows.length ? `<table class="data"><thead><tr><th class="t"><button>Wk</button></th><th class="t"><button>Team</button></th><th class="t"><button>Opp</button></th><th class="t"><button>Site</button></th><th class="t"><button>${s.side === "team" ? "Scorer" : "Scored by opponent"}</button></th><th class="t"><button>Pos</button></th><th class="t"><button>How</button></th><th><button>Game's 1st?</button></th></tr></thead><tbody>
+  <div class="tablebox">${rows.length ? `<table class="data"><thead><tr><th class="t"><span>Wk</span></th><th class="t"><span>Team</span></th><th class="t"><span>Opp</span></th><th class="t"><span>Site</span></th><th class="t"><span>${s.side === "team" ? "Scorer" : "Scored by opponent"}</span></th><th class="t"><span>Pos</span></th><th class="t"><span>How</span></th><th><span>Game's 1st?</span></th></tr></thead><tbody>
     ${rows.map(l => { const p = l[posKey]; const howKey = s.side === "team" ? "How" : "Allowed How";
       const gameFirst = l["Game 1st TD Scorer"] && l["Game 1st TD Scorer"] === l[nameKey];
       return `<tr><td class="t">${l.Week}</td><td class="t strong">${esc(l.Team)}</td><td class="t">${esc(l.Opp)}</td><td class="t">${esc(l["Home/Away"])}</td><td class="t" style="font-weight:600">${esc(l[nameKey]) || "No TD"}</td><td class="t">${p ? `<span class="chip ${p === "DEF/ST" ? "DST" : esc(p)}">${esc(p)}</span>` : ""}</td><td class="t">${esc(l[howKey])}</td><td>${gameFirst ? "Yes" : ""}</td></tr>`; }).join("")}
@@ -595,16 +724,26 @@ $("#view").addEventListener("change", e => {
   if (id === "log-week") { state.log.week = v; render(); }
   if (id === "results-week") { state.resultsWeek = v; render(); }
 });
-$("#view").addEventListener("input", e => { if (e.target.id === "ply-q") { state.ply.q = e.target.value; fillPlayers(); } });
+$("#view").addEventListener("input", e => {
+  if (e.target.id === "ply-q") { state.ply.q = e.target.value; fillPlayers(); }
+  const key = e.target.dataset.price;
+  if (key) { // Show the verdict as the reader types, without redrawing the page under them.
+    const text = e.target.value.trim(), out = e.target.nextElementSibling;
+    if (text) prices[key] = text; else delete prices[key];
+    [out.textContent, out.className] = verdict(+e.target.dataset.p, text);
+    try { localStorage.setItem(PRICES_KEY, JSON.stringify({ week: D.week, season: D.season, prices })); } catch (err) { /* Kept for this visit only. */ }
+  }
+});
 
 /* ---- Update from the sheet. Keep this parser in step with build.py. ---- */
 const EXPORT_URL = "https://docs.google.com/spreadsheets/d/1fwtkoY2KveC6TJPRyn0pvHPseVw2_4j2Qbud1x0q1pU/export?format=xlsx";
 const XLSX_URL = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+const XLSX_SRI = "sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA=="; // The browser refuses the file if it ever changes.
 function loadXlsx() {
   if (window.XLSX) return Promise.resolve();
   return new Promise((ok, fail) => {
     const s = document.createElement("script");
-    s.src = XLSX_URL; s.onload = ok; s.onerror = () => fail(new Error("Couldn't load the spreadsheet reader."));
+    s.src = XLSX_URL; s.integrity = XLSX_SRI; s.crossOrigin = "anonymous"; s.onload = ok; s.onerror = () => fail(new Error("Couldn't load the spreadsheet reader."));
     document.head.append(s);
   });
 }
@@ -688,9 +827,9 @@ const signature = d => JSON.stringify([d.week, d.refreshed, d.log.length, d.slat
 function parseLines(text, week) { // Keep in step with game_lines in build.py.
   const wb = XLSX.read(text, { type: "string", raw: true }), out = {};
   for (const g of XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" })) {
-    if (String(g.season) !== "2026" || String(g.week) !== String(week) || g.spread_line === "" || g.total_line === "") continue;
+    if (String(g.season) !== String(D.season || 2026) || String(g.week) !== String(week) || g.spread_line === "" || g.total_line === "") continue;
     const spread = +g.spread_line, total = +g.total_line;
-    const info = { total, kickoff: `${g.gameday}T${g.gametime}:00-05:00`, final: g.result !== "" };
+    const info = { total, kickoff: kickoffIso(g.gameday, g.gametime), final: g.result !== "" };
     out[g.home_team] = { ...info, margin: spread, imp: (total + spread) / 2 };
     out[g.away_team] = { ...info, margin: -spread, imp: (total - spread) / 2 };
   }
@@ -715,7 +854,7 @@ $("#update-btn").onclick = async () => {
     const resp = await fetch(EXPORT_URL);
     if (!resp.ok) throw new Error("Couldn't reach the sheet. Check that it's still shared by link, then try again.");
     const fresh = parseWorkbook(await resp.arrayBuffer());
-    fresh.recent = D.recent; fresh.model = D.model; fresh.lines = D.lines; fresh.injuries = D.injuries; fresh.injuriesAt = D.injuriesAt;
+    fresh.recent = D.recent; fresh.model = D.model; fresh.season = D.season; fresh.lines = D.lines; fresh.injuries = D.injuries; fresh.injuriesAt = D.injuriesAt;
     try {
       const inj = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries");
       if (inj.ok) { fresh.injuries = parseInjuries(await inj.json()); fresh.injuriesAt = new Date().toISOString(); }
@@ -735,7 +874,15 @@ $("#update-btn").onclick = async () => {
   } finally { btn.disabled = false; }
 };
 
-$("#stamp").textContent =`2026 season · Week ${D.week} · sheet data refreshed ${D.refreshed.split(",")[0]} · kickoffs in Central Time`;
-const h = location.hash.slice(1); if (TABS.some(t => t[0] === h)) state.tab = h;
+$("#stamp").textContent = `${D.season || 2026} season · Week ${D.week} · sheet refreshed ${D.refreshed.split(",")[0]} · times Central`;
+const fromHash = () => { const h = location.hash.slice(1); if (TABS.some(t => t[0] === h) && h !== state.tab) { state.tab = h; return true; } };
+fromHash();
+addEventListener("hashchange", () => { if (fromHash()) render(); });
 render();
+if (location.hash === "#selftest") { // tests/test_build.py reads this to check the page scores players the way build.py does.
+  const out = document.createElement("pre"); out.id = "selftest";
+  out.textContent = JSON.stringify({ players: D.players.map(p => [p.team, p.player, p.anyRate, p.firstRate, p.gameRate, fairOdds(p.anyRate)]), values: [[0.45, "+150"], [0.45, "100"], [0.6, "-150"], [0.3, "abc"]].map(([p, t]) => verdict(p, t)[0]), picks: D.slate.map(r => [r.team, r.player]),
+    kickoffs: ["2026-09-13", "2026-11-01", "2026-11-08", "2027-01-03", "2027-03-14"].map(d => kickoffIso(d, "13:00")) });
+  document.body.append(out);
+}
 </script>

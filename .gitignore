@@ -1,3 +1,6 @@
 __pycache__/
 *.xlsx
+*.pkl
+*.tmp
 .DS_Store
+model/data/
