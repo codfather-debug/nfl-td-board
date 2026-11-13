@@ -500,6 +500,18 @@ def nfl_avg(ws):
     return out
 
 
+def write_chances(data, path=os.path.join(HERE, "chances.json")):
+    """Each player's any-TD chance, published beside the page. The NFL Stat Board shows these for its Anytime TD cards."""
+    if not data["recent"] or not data["lines"]:
+        return  # Without snaps or lines the chances are rough; leave the last good file.
+    out = {"season": SEASON, "week": data["week"], "builtAt": data["injuriesAt"], "tested": data["model"]["heldOut"]["any"],
+           "players": [{"team": p["team"], "key": norm_name(p["player"]), "player": p["player"], "pos": p["pos"],
+                        "anyRate": round(p["anyRate"], 4)} for p in score_players(data)]}
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(out, f, separators=(",", ":"), ensure_ascii=False)
+    os.replace(path + ".tmp", path)
+
+
 def write_page(data, path=os.path.join(HERE, "index.html")):
     payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/")
     with open(os.path.join(HERE, "template.html"), encoding="utf-8") as f:
@@ -570,6 +582,7 @@ def main(path):
     data["season"] = SEASON
     data["results"] = update_history(data)
     write_page(data)
+    write_chances(data)
     print(f"Week {week}: {len(slate)} picks, {len(data['allowed'])} defenses, "
           f"{len(usage)} players, {len(data['log'])} log rows. Refreshed {refreshed}")
 

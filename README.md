@@ -33,6 +33,9 @@ Do this every few weeks during the season, so the model has seen the latest game
 `train.py` prints how the model did on seasons it wasn't built from. The same numbers appear on
 the page's Results tab.
 
+`build.py` also writes `chances.json`, each player's any-TD chance for the week. The NFL Stat Board
+reads it from this site so both show the same number for Anytime TD.
+
 ## The model in one paragraph
 
 Two logistic regressions, one for any TD and one for the team's first TD, read eight things about a

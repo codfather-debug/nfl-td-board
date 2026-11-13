@@ -154,6 +154,15 @@ class BuiltPage(unittest.TestCase):
             elif p["team"] != star["team"]:
                 self.assertEqual(p["anyRate"], before["anyRate"], p["player"])
 
+    def test_published_chances_match_the_page(self):
+        with open(os.path.join(ROOT, "chances.json"), encoding="utf-8") as f:
+            shared = json.load(f)
+        self.assertEqual((shared["season"], shared["week"]), (self.data["season"], self.data["week"]))
+        mine = {(p["team"], build.norm_name(p["player"])): p["anyRate"] for p in self.players}
+        self.assertEqual(len(shared["players"]), len(mine))
+        for p in shared["players"]:
+            self.assertAlmostEqual(p["anyRate"], mine[(p["team"], p["key"])], places=4, msg=p["player"])
+
     @unittest.skipUnless(CHROME, "Chrome is not installed")
     def test_page_matches_build(self):
         with tempfile.TemporaryDirectory() as profile:
