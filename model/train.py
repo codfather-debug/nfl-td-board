@@ -21,13 +21,18 @@ from sklearn.preprocessing import StandardScaler
 import features
 
 # A "sqrt_" prefix means the square root of that number: the first few touches matter more than the last few.
-FEATURES = ["sqrt_oppg", "sqrt_rzsh", "sqrt_i10sh", "snaplast", "imp", "missrz", "isRB", "isWR", "isTE", "isQB"]
+FEATURES = ["sqrt_oppg", "sqrt_rzsh", "sqrt_i10sh", "snaplast", "imp", "missrz", "qbprev", "isRB", "isWR", "isTE", "isQB"]
 CALIBRATION_QUANTILES = [0, .1, .2, .3, .4, .5, .6, .7, .8, .9, .95, .975, .99, 1]
+QB_PRIOR_WEIGHT = 8      # Last season's scoring rate counts as if 8 games at the average quarterback's rate came first.
 PLAY_MIN = 0.25         # An any-TD chance at or above this is tracked as a play.
 BANDS = {"any": [0, .15, .25, .35, .45, 1], "first": [0, .05, .10, .15, .20, 1]}
 
 
 def add_inputs(d):
+    # A quarterback's own scoring record: the model can't otherwise tell a goal-line runner from a pocket passer.
+    qbs = d[d.pos == "QB"].drop_duplicates(["season", "k"])
+    d.attrs["qbPrior"] = {"avg": round(float(qbs.qb_s.sum() / qbs.qb_g.sum()), 4), "weight": QB_PRIOR_WEIGHT}
+    d["qbprev"] = (d.pos == "QB") * (d.qb_s + QB_PRIOR_WEIGHT * d.attrs["qbPrior"]["avg"]) / (d.qb_g + QB_PRIOR_WEIGHT)
     for f in FEATURES:
         if f.startswith("sqrt_"):
             d[f] = np.sqrt(d[f[5:]])
@@ -119,6 +124,7 @@ def main(data_dir):
         "firstCal": calibration(raw_first.values, m.tf.values),
         "gameFirstSlope": slope,
         "gameFirstScale": round(game_scale, 4),
+        "qbPrior": d.attrs["qbPrior"],
         "playMin": PLAY_MIN,
         "heldOut": {
             "any": report(cal_any, m["any"], BANDS["any"]),

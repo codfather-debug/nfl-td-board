@@ -206,7 +206,7 @@ try {
   const saved = JSON.parse(localStorage.getItem(SAVED_KEY));
   if (saved && refreshedAt(saved) >= refreshedAt(D)) {
     const newerInjuries = (saved.injuriesAt || "") > (D.injuriesAt || "") ? saved : D;
-    D = { ...saved, season: D.season, results: D.results, recent: D.recent, model: D.model, lines: newerInjuries.lines, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
+    D = { ...saved, season: D.season, results: D.results, recent: D.recent, qbPrev: D.qbPrev, model: D.model, lines: newerInjuries.lines, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
   } else localStorage.removeItem(SAVED_KEY);
 } catch (e) { /* Storage is optional; the data built into the page still works. */ }
 
@@ -227,7 +227,8 @@ function calibrate(curve, p) { // The model's raw number, turned into how often 
   return y[y.length - 1];
 }
 function modelInputs(u, x, imp, missrz) {
-  const base = { oppg: ((u.targets || 0) + (u.carries || 0)) / x.gp, rzsh: u.rz_opp_share || 0, i10sh: u.i10_opp_share || 0, snaplast: x.lastPlayed || 0, imp, missrz };
+  const prior = D.model.qbPrior, [games, scored] = (D.qbPrev || {})[normName(u.player)] || [0, 0]; // A quarterback's games last season and the games he scored in.
+  const base = { qbprev: (u.pos === "QB") * (scored + prior.weight * prior.avg) / (games + prior.weight), oppg: ((u.targets || 0) + (u.carries || 0)) / x.gp, rzsh: u.rz_opp_share || 0, i10sh: u.i10_opp_share || 0, snaplast: x.lastPlayed || 0, imp, missrz };
   POS.forEach(p => { base["is" + p] = +(u.pos === p); });
   return Object.fromEntries(D.model.features.map(f => [f, f.startsWith("sqrt_") ? Math.sqrt(Math.max(base[f.slice(5)], 0)) : base[f]]));
 }
@@ -421,7 +422,7 @@ function viewPlays() {
   const list = healthy.filter(p => (showStarted || !p.started) && (s.pos === "All" || p.pos === s.pos) && (s.day === "All" || p.day === s.day)).slice(0, 40);
   let html = `<div><h2>Top TD plays, Week ${D.week}</h2>
     <p class="hint">Each player's chance to score a touchdown this week. Injuries checked${injuriesWhen()}. Check game-day inactives before betting.</p>
-    ${how(`The chance comes from the player's share of red-zone and inside-the-10 chances, touches per game, snaps, the team's projected points, and whether a teammate at the same position is out. It was checked on ${D.model.sample.playerGames.toLocaleString()} player games from seasons the model wasn't built on, and the Results tab shows how close it came. ${ODDS_NOTE} A passing TD doesn't count for the quarterback.`)}</div>
+    ${how(`The chance comes from the player's share of red-zone and inside-the-10 chances, touches per game, snaps, the team's projected points, whether a teammate at the same position is out, and for quarterbacks how often they scored last season. It was checked on ${D.model.sample.playerGames.toLocaleString()} player games from seasons the model wasn't built on, and the Results tab shows how close it came. ${ODDS_NOTE} A passing TD doesn't count for the quarterback.`)}</div>
     <div class="filters">${seg("playday", days, s.day)}${seg("playpos", ["All", ...POS], s.pos)}
       ${allStarted ? `<span class="count">Every game this week has kicked off.</span>` : `<div class="seg"><button data-playstarted aria-pressed="${s.started}">Include started games</button></div>`}</div>
     <div>
@@ -854,7 +855,7 @@ $("#update-btn").onclick = async () => {
     const resp = await fetch(EXPORT_URL);
     if (!resp.ok) throw new Error("Couldn't reach the sheet. Check that it's still shared by link, then try again.");
     const fresh = parseWorkbook(await resp.arrayBuffer());
-    fresh.recent = D.recent; fresh.model = D.model; fresh.season = D.season; fresh.lines = D.lines; fresh.injuries = D.injuries; fresh.injuriesAt = D.injuriesAt;
+    fresh.recent = D.recent; fresh.qbPrev = D.qbPrev; fresh.model = D.model; fresh.season = D.season; fresh.lines = D.lines; fresh.injuries = D.injuries; fresh.injuriesAt = D.injuriesAt;
     try {
       const inj = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries");
       if (inj.ok) { fresh.injuries = parseInjuries(await inj.json()); fresh.injuriesAt = new Date().toISOString(); }

@@ -132,6 +132,15 @@ class BuiltPage(unittest.TestCase):
                 totals[p["team"]] = totals.get(p["team"], 0) + p["firstRate"]
         self.assertLessEqual(max(totals.values()), build.TEAM_FIRST_CAP + 1e-9)
 
+    def test_a_quarterback_who_scored_often_last_season_rates_higher(self):
+        by_name = {p["player"]: p for p in self.players if p["pos"] == "QB"}
+        prior = self.data["qbPrev"]
+        runner = max(by_name, key=lambda n: prior.get(build.norm_name(n), [0, 0])[1])
+        data = json.loads(json.dumps(self.data))
+        data["qbPrev"] = {}
+        without = {p["player"]: p for p in build.score_players(data)}
+        self.assertGreater(by_name[runner]["anyRate"], without[runner]["anyRate"])
+
     def test_a_teammate_being_out_raises_a_players_chance(self):
         data = json.loads(json.dumps(self.data))
         data["injuries"] = {}

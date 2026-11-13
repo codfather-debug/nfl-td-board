@@ -11,6 +11,7 @@ tab, so the model is trained on the same numbers it is later shown:
   snaplast  offensive snap share in the last game the player played
   imp       the team's projected points from the betting line
   missrz    red-zone share of teammates at the player's position who are sitting this game out
+  qb_g, qb_s  for a quarterback, last season's games and the games he scored in (train.py makes a rate of them)
 
 Usage: features.py data_dir out.pkl   (needs pandas; files are downloaded into data_dir if missing)
 """
@@ -31,6 +32,7 @@ SOURCES = {
     "stats_{s}.csv": NFLVERSE + "/stats_player/stats_player_week_{s}.csv",
     "snaps_{s}.csv": NFLVERSE + "/snap_counts/snap_counts_{s}.csv",
 }
+PLAYER_TD_COLUMNS = ["rushing_tds", "receiving_tds", "special_teams_tds", "fumble_recovery_tds"]  # As in build.py.
 PBP_COLUMNS = ["game_id", "play_id", "season_type", "week", "posteam", "home_team", "away_team", "yardline_100",
                "play_type", "two_point_attempt", "rusher_player_id", "receiver_player_id", "touchdown",
                "td_team", "td_player_id", "total_line", "spread_line"]
@@ -55,6 +57,11 @@ def download(data_dir, seasons=SEASONS, refresh_latest=True):
                 continue
             print(f"Downloading {os.path.basename(path)}")
             urllib.request.urlretrieve(url.format(s=season), path)
+    before = min(seasons) - 1  # Only for quarterbacks' scoring the season before the first one.
+    path = os.path.join(data_dir, f"stats_{before}.csv")
+    if not os.path.exists(path):
+        print(f"Downloading {os.path.basename(path)}")
+        urllib.request.urlretrieve(SOURCES["stats_{s}.csv"].format(s=before), path)
 
 
 def match_snap_names(snaps, known):
@@ -81,6 +88,15 @@ def missing_share(d):
     grid["share"] = (player.rz.cumsum() - grid.rz) / grid.prior_t_rz.clip(lower=1)
     out = grid[(grid.played == 0) & (grid.gp >= 2)]
     return out.groupby(["team", "week", "pos"], as_index=False).share.sum().rename(columns={"share": "missrz"})
+
+
+def qb_prior(data_dir, season):
+    """Each quarterback's games last season and the games he scored in. Keep in step with qb_prior in build.py."""
+    stats = pd.read_csv(os.path.join(data_dir, f"stats_{season - 1}.csv"), low_memory=False)
+    stats = stats[(stats.season_type == "REG") & (stats.position == "QB") & (stats.attempts.fillna(0) + stats.carries.fillna(0) > 0)]
+    scored = stats[PLAYER_TD_COLUMNS].fillna(0).sum(axis=1) > 0
+    out = pd.DataFrame({"k": stats.player_display_name.map(norm_name), "qb_g": 1, "qb_s": scored.astype(int)})
+    return out.groupby("k", as_index=False).sum().assign(pos="QB")
 
 
 def season_table(data_dir, season):
@@ -153,6 +169,7 @@ def season_table(data_dir, season):
     d["rzsh"] = d.prior_rz / d.prior_t_rz.clip(lower=1)
     d["i10sh"] = d.prior_i10 / d.prior_t_i10.clip(lower=1)
     d = d.merge(missing_share(d), on=["team", "week", "pos"], how="left").fillna({"missrz": 0})
+    d = d.merge(qb_prior(data_dir, season), on=["k", "pos"], how="left").fillna({"qb_g": 0, "qb_s": 0})
     d["any"] = (d.tds > 0).astype(int)
     d["season"] = season
     return d

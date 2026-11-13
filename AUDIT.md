@@ -61,9 +61,22 @@ these changes is in `../nfl-td-app-backup-2026-11-12`.
 | No sportsbook prices, so the app couldn't say which bets were good value. | | Each play has a box for the sportsbook's odds. The app shows the bet's value: average profit per dollar staked if the app's chance is right. First-TD picks have the same box in their detail. Prices stay in your browser for the week. |
 | When a starter was out, teammates' chances didn't rise. | In games where a teammate at the same position holding 15% or more of the red-zone work sat out, players scored 23.5% of the time; the model said 17.7% (1,729 player games, all held out). | New input: the red-zone share of teammates at the player's position who are out. With it the model says 23.5%. Log loss 0.4229 to 0.4213 and AUC 0.738 to 0.741 across six held-out seasons. Affected players are flagged "Bigger role". |
 | The top of the scale stopped at about 60%. | With six seasons, players the raw model rated 60 to 65% scored 51%, and those rated above 65% scored 67% (120 player games). | Trained on six seasons (2021 to 2026, 25,259 player games) with a finer top step. The top is now 62%. That ceiling is what the data supports, not a shortage of data; players tied at the top are ordered by the model's raw number. |
-| The sheet is parsed twice with no test. | | A test has Chrome parse the live sheet with the page's code and compares every value to `build.py`'s. They agree. Eleven tests in all. |
+| The sheet is parsed twice with no test. | | A test has Chrome parse the live sheet with the page's code and compares every value to `build.py`'s. They agree.  |
+
+## Follow-up, 13 November 2026: running quarterbacks
+
+The model rated Josh Allen at 36% when the market had him near 55%. Over 74 held-out games since
+2021 it gave him 30% and he scored in 50%; Jalen Hurts was 35% against 49%. It knew a player's
+role but not his own scoring record, so it couldn't tell a goal-line runner from a pocket passer.
+
+New input for quarterbacks: how often they scored last season, pulled toward the average
+quarterback (15%) for those with few games. Held-out log loss 0.4212 to 0.4209 overall. Allen now
+reads 44%. That closes about half the gap, not all of it. Twelve tests in all.
 
 ## Known limits, not fixed
+
+- Quarterbacks who run in a lot of touchdowns are still rated below the market (Allen 44% against
+  about 55%).
 
 - Prices are typed in by hand. Pulling them automatically needs a paid odds feed and an API key.
 - Only teammates at the same position get the "starter out" bump, and only for players listed Out,

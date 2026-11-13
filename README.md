@@ -35,10 +35,11 @@ the page's Results tab.
 
 ## The model in one paragraph
 
-Two logistic regressions, one for any TD and one for the team's first TD, read seven things about a
+Two logistic regressions, one for any TD and one for the team's first TD, read eight things about a
 player: touches per game, share of the team's red-zone chances, share of chances inside the 10,
 snap share in the last game played, the team's projected points from the betting line, the
-red-zone share of teammates at the same position who are out, and position. A calibration curve then turns the raw output into the rate at which that output came
+red-zone share of teammates at the same position who are out, position, and for a quarterback
+how often he scored last season. A calibration curve then turns the raw output into the rate at which that output came
 true in seasons the model wasn't fit on. The chance of the game's first TD is the team's-first
 chance times the chance, from the point spread, that the team scores first.
 

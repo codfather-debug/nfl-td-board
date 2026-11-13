@@ -32,6 +32,7 @@ EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=x
 NFLVERSE = "https://github.com/nflverse/nflverse-data/releases/download"
 SNAPS_URL = f"{NFLVERSE}/snap_counts/snap_counts_{SEASON}.csv"
 STATS_URL = f"{NFLVERSE}/stats_player/stats_player_week_{SEASON}.csv"
+LAST_STATS_URL = f"{NFLVERSE}/stats_player/stats_player_week_{SEASON - 1}.csv"
 LINES_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
 INJURIES_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries"
 EASTERN = zoneinfo.ZoneInfo("America/New_York")  # The schedule lists kickoffs in Eastern time.
@@ -167,6 +168,17 @@ def recent_usage(usage, counted):
     return out
 
 
+def qb_prior():
+    """Each quarterback's games last season and the games he scored in. Keep in step with qb_prior in model/features.py."""
+    out = collections.defaultdict(lambda: [0, 0])
+    for r in fetch_csv(LAST_STATS_URL):
+        if r["season_type"] == "REG" and r["position"] == "QB" and number(r["attempts"]) + number(r["carries"]) > 0:
+            games = out[norm_name(r["player_display_name"])]
+            games[0] += 1
+            games[1] += player_tds(r) > 0
+    return dict(out)
+
+
 def injuries(nicks):
     """Latest ESPN status by team and player. Keep in step with parseInjuries in template.html."""
     latest = {}
@@ -198,9 +210,12 @@ def calibrate(curve, p):
     return ys[-1]
 
 
-def model_inputs(model, u, x, imp, missrz):
+def model_inputs(model, u, x, imp, missrz, qb_games):
     """The numbers the model reads for one player. Same as modelInputs in template.html."""
-    base = {"oppg": ((u["targets"] or 0) + (u["carries"] or 0)) / x["gp"], "rzsh": u["rz_opp_share"] or 0,
+    prior = model["qbPrior"]
+    games, scored = qb_games.get(norm_name(u["player"]), (0, 0))
+    base = {"qbprev": (u["pos"] == "QB") * (scored + prior["weight"] * prior["avg"]) / (games + prior["weight"]),
+            "oppg": ((u["targets"] or 0) + (u["carries"] or 0)) / x["gp"], "rzsh": u["rz_opp_share"] or 0,
             "i10sh": u["i10_opp_share"] or 0, "snaplast": x["lastPlayed"] or 0, "imp": imp, "missrz": missrz,
             **{"is" + p: int(u["pos"] == p) for p in POSITIONS}}
     return {f: math.sqrt(max(base[f[5:]], 0)) if f.startswith("sqrt_") else base[f] for f in model["features"]}
@@ -257,7 +272,7 @@ def score_players(data):
         line = data["lines"].get(u["team"])
         # A player's chance rises when a teammate at their position is out. Their own absence doesn't count.
         missrz = missing[(u["team"], u["pos"])] - ((u["rz_opp_share"] or 0) if unavailable else 0)
-        inputs = model_inputs(model, u, x, line["imp"] if line else LEAGUE_AVG_POINTS, missrz)
+        inputs = model_inputs(model, u, x, line["imp"] if line else LEAGUE_AVG_POINTS, missrz, data.get("qbPrev") or {})
         players.append({"player": u["player"], "team": u["team"], "pos": u["pos"], "status": status,
                         "unavailable": unavailable, "missrz": missrz,
                         "starter": starter_score(u, x, firsts[(u["team"], u["player"])]),
@@ -540,6 +555,11 @@ def main(path):
     except Exception as e:
         print(f"Injury data unavailable: {e}")
         data["injuries"], data["injuriesAt"] = {}, ""
+    try:
+        data["qbPrev"] = qb_prior()
+    except Exception as e:
+        print(f"Last season's stats unavailable: {e}")
+        data["qbPrev"] = {}
     try:
         data["lines"] = game_lines(week)
     except Exception as e:
