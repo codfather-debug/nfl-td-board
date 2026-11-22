@@ -184,6 +184,22 @@ class BuiltPage(unittest.TestCase):
             chosen = build.choose_pick(row["player"], row["pick"].split()[0], [p for p in self.players if p["team"] == team])
             self.assertEqual(name, chosen["player"] if chosen else row["player"], team)
 
+        slate, played = self.data["slate"], {l["Team"] for l in self.data["log"] if l["Week"] == self.data["week"] and l.get("Game 1st TD Team")}
+        # Records and two scorer tables, plus the chances until the game is played.
+        expected = [3 if {slate[i]["team"], slate[i + 1]["team"]} & played else 4 for i in range(0, len(slate), 2)]
+        self.assertEqual(page["matchups"], expected, "A matchup is missing a first TD table.")
+        neutral = set(self.data.get("neutral") or [])
+        for team, shown in page["firsts"]:
+            games = [l for l in self.data["log"] if l["Team"] == team and l["Week"] < self.data["week"]]
+            for venue in ("Home", "Away", "All"):
+                there = [l for l in games if venue == "All" or (l["Home/Away"] == venue and f"{team}|{l['Week']}" not in neutral)]
+                scored = [l for l in there if l.get("Scored Game 1st TD?") == "Y"]
+                self.assertEqual((shown[venue]["gp"], shown[venue]["scored"]), (len(there), len(scored)), f"{team} {venue}")
+                allowed = [l for l in there if l.get("Scored Game 1st TD?") != "Y" and l.get("1st TD Allowed Scorer") not in (None, "", "No TD")]
+                self.assertEqual(shown[venue]["allowed"], len(allowed), f"{team} {venue}")
+                for player in shown["scorers"]:
+                    self.assertEqual(player["game1"][venue], sum(l["Team 1st TD Scorer"] == player["player"] for l in scored), player["player"])
+
         days = ["2026-09-13", "2026-11-01", "2026-11-08", "2027-01-03", "2027-03-14"]
         self.assertEqual([k[-6:] for k in page["kickoffs"]], [build.kickoff_iso(d, "13:00")[-6:] for d in days])
 

@@ -148,6 +148,18 @@ select, input[type="search"] { background: var(--surface); border: 1px solid var
 .mini td { text-align: right; padding: 3px 0 3px 8px; border-top: 1px solid var(--line); }
 .mini th:first-child, .mini td:first-child { text-align: left; padding-left: 0; }
 .mixes { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 14px; }
+.first-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 18px 28px; align-items: start; }
+.first-grid > div { display: grid; gap: 8px; min-width: 0; }
+.mini.firsts th, .mini.firsts td { padding: 4px 5px; }
+.mini.firsts th:first-child, .mini.firsts td:first-child { padding-left: 0; }
+.mini.firsts thead tr + tr th:first-child { text-align: right; padding-left: 5px; }
+.mini.firsts .now { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--fg); font-weight: 700; }
+.mini.firsts .span { text-align: center; }
+.mini.firsts .pair td { border-top: 2px solid var(--line); }
+.mini.firsts small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
+.mixes.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mixes.three .mix span { font-size: 11.5px; letter-spacing: -.01em; }
+@media (max-width: 520px) { .mixes.three { grid-template-columns: minmax(0, 1fr); } }
 .splitbar { display: flex; height: 26px; border-radius: 4px; overflow: hidden; font: 700 15px/26px var(--display); }
 .splitbar span { padding: 0 8px; white-space: nowrap; overflow: hidden; }
 .splitbar .a { background: var(--accent); color: var(--accent-fg); }
@@ -206,7 +218,7 @@ try {
   const saved = JSON.parse(localStorage.getItem(SAVED_KEY));
   if (saved && refreshedAt(saved) >= refreshedAt(D)) {
     const newerInjuries = (saved.injuriesAt || "") > (D.injuriesAt || "") ? saved : D;
-    D = { ...saved, season: D.season, results: D.results, recent: D.recent, qbPrev: D.qbPrev, model: D.model, lines: newerInjuries.lines, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
+    D = { ...saved, season: D.season, results: D.results, recent: D.recent, qbPrev: D.qbPrev, neutral: D.neutral, model: D.model, lines: newerInjuries.lines, injuries: newerInjuries.injuries, injuriesAt: newerInjuries.injuriesAt };
   } else localStorage.removeItem(SAVED_KEY);
 } catch (e) { /* Storage is optional; the data built into the page still works. */ }
 
@@ -506,18 +518,87 @@ function pickRow(r) {
 }
 
 /* ---- Matchups ---- */
+/* First TDs home and away, from games before this week. A neutral-site game counts only under All. */
+const VENUES = [["Home", "Home"], ["Away", "Away"], ["All", "All"]];
+const isNeutral = (team, week) => (D.neutral || []).includes(`${team}|${week}`);
+function firstHistory(team) {
+  const out = {};
+  for (const [venue] of VENUES) out[venue] = { gp: 0, scored: 0, allowed: 0, pos: {}, allowedPos: {} };
+  const scorers = {};
+  for (const l of D.log) {
+    if (l.Team !== team || l.Week >= D.week) continue;
+    const venues = isNeutral(team, l.Week) ? ["All"] : [l["Home/Away"], "All"];
+    const first = l["Scored Game 1st TD?"] === "Y", who = l["Team 1st TD Scorer"];
+    const oppFirst = !first && !!l["1st TD Allowed Scorer"] && l["1st TD Allowed Scorer"] !== "No TD";
+    for (const venue of venues) {
+      const v = out[venue]; if (!v) continue;
+      v.gp++; v.scored += first; v.allowed += oppFirst;
+      const pos = l["Team 1st TD Pos"], oppPos = l["1st TD Allowed Pos"];
+      if (pos) v.pos[pos] = (v.pos[pos] || 0) + 1;
+      if (oppPos) v.allowedPos[oppPos] = (v.allowedPos[oppPos] || 0) + 1;
+      if (!who || who === "No TD") continue;
+      const s = scorers[who] ??= { player: who, team1: { Home: 0, Away: 0, All: 0 }, game1: { Home: 0, Away: 0, All: 0 } };
+      s.team1[venue]++; s.game1[venue] += first;
+    }
+  }
+  out.scorers = Object.values(scorers).sort((x, y) => y.team1.All - x.team1.All || y.game1.All - x.game1.All || x.player.localeCompare(y.player));
+  return out;
+}
+const venueNow = r => isNeutral(r.team, D.week) ? "All" : r.opp.startsWith("@") ? "Away" : "Home";
+const nowClass = (venue, now) => venue === now ? ' class="now"' : "";
+function positionSplit(title, history, field, now) {
+  return `<div><div class="mix-label"><b>${esc(title)}</b></div><div class="mixes three">${VENUES.map(([venue, label]) => {
+    const v = history[venue], mix = [...POS, "DEF/ST"].filter(p => v[field][p]).map(p => `${p} ${v[field][p]}`).join(" · ");
+    return mixBar(`${label}${venue === now && now !== "All" ? " (this week)" : ""}`, `${mix} (${v.gp}g)`);
+  }).join("")}</div></div>`;
+}
+function scorerTable(r) {
+  const h = firstHistory(r.team), now = venueNow(r);
+  if (!h.scorers.length) return `<div class="sub">No TDs logged before this week.</div>`;
+  const out = p => D.players.some(x => x.team === r.team && x.player === p && x.unavailable);
+  return `<table class="mini firsts"><thead>
+      <tr><th rowspan="2">Player</th><th class="span" colspan="3">Team's 1st TD</th><th class="span" colspan="3">Game's 1st TD</th></tr>
+      <tr>${[1, 2].map(() => VENUES.map(([venue, label]) => `<th${nowClass(venue, now)}>${label}</th>`).join("")).join("")}</tr></thead><tbody>
+    ${h.scorers.map(s => `<tr><td>${esc(s.player)}${out(s.player) ? ` <span class="flag bad">Out</span>` : ""}</td>${[s.team1, s.game1].map(c => VENUES.map(([venue]) => `<td${nowClass(venue, now)}>${c[venue] || "–"}</td>`).join("")).join("")}</tr>`).join("")}
+  </tbody></table>`;
+}
+function firstMatchup(away, home) {
+  const played = D.log.find(l => l.Team === home.team && l.Week === D.week && l["Game 1st TD Team"]);
+  const history = { [away.team]: firstHistory(away.team), [home.team]: firstHistory(home.team) };
+  const row = (r, field, label, pair) => {
+    const now = venueNow(r);
+    return `<tr${pair ? ' class="pair"' : ""}><td><b>${esc(r.team)}</b> ${label}</td>${VENUES.map(([venue]) => {
+      const v = history[r.team][venue];
+      return `<td${nowClass(venue, now)}>${v.gp ? `${v[field]} of ${v.gp}<small>${pct(v[field] / v.gp)}</small>` : "–"}</td>`;
+    }).join("")}</tr>`;
+  };
+  const likely = D.players.filter(p => (p.team === away.team || p.team === home.team) && !p.unavailable).sort((x, y) => y.gameRate - x.gameRate).slice(0, 6);
+  return `<section class="panel">
+    <h3>Who scores the game's first TD</h3>
+    ${played ? `<div><b>Result: ${esc(played["Game 1st TD Team"])} scored first, ${esc(played["Game 1st TD Scorer"])}.</b> <span class="sub">The records below are from before this game.</span></div>` : ""}
+    <div><div class="sub" style="margin-bottom:5px">${away.gameFirstVegas ? "Each team's chance, from the Vegas spread." : "Each team's chance, from its first TD record. No betting line yet."}${venueNow(home) === "All" ? " Neutral site, so neither team is at home." : ""}</div>
+      <div class="splitbar"><span class="a" style="width:${parseInt(away.gameFirst)}%">${esc(away.team)} ${esc(away.gameFirst)}</span><span class="b" style="width:${parseInt(home.gameFirst)}%">${esc(home.team)} ${esc(home.gameFirst)}</span></div></div>
+    <div class="first-grid">
+      <div><h3>Most likely first scorer</h3>
+        ${played ? `<div class="sub">Not shown once a game is played, because the chances would now include that game's own stats. The Results tab keeps the ones locked at kickoff.</div>` : likely.length ? `<table class="mini firsts"><thead><tr><th>Player</th><th>Team</th><th>Chance</th><th>Fair odds</th></tr></thead><tbody>
+          ${likely.map(p => `<tr><td>${esc(p.player)} <span class="chip ${esc(p.pos)}">${esc(p.pos)}</span> ${statusTag(p)}</td><td>${esc(p.team)}</td><td><b>${pctText(p.gameRate)}</b></td><td>${oddsText(p.gameRate)}</td></tr>`).join("")}
+        </tbody></table>` : `<div class="sub">Player chances couldn't be loaded.</div>`}</div>
+      <div><h3>First TD record, home and away</h3>
+        <table class="mini firsts"><thead><tr><th>Team</th>${VENUES.map(([, label]) => `<th>${label}</th>`).join("")}</tr></thead><tbody>
+          ${row(away, "scored", "scored first")}${row(home, "allowed", "allowed first")}${row(home, "scored", "scored first", true)}${row(away, "allowed", "allowed first")}
+        </tbody></table></div>
+    </div>
+    ${how("Shaded cells match where each team plays this week. Each pair of rows puts one team's record of scoring the game's first TD beside its opponent's record of allowing it. Neutral-site games count only under All. These records are context and don't change the chances: over 2020 to 2026 they didn't improve on the point spread, and a split of four or five games swings a lot on luck.")}
+  </section>`;
+}
 function viewMatchups() {
   const g = games.find(x => x.some(r => r.team === state.game)) || games[0];
   const [a, b] = g;
   const away = a.opp.startsWith("@") ? a : b, home = away === a ? b : a;
-  return `<div><h2>Game matchups, Week ${D.week}</h2><p class="hint">One game at a time: all touchdowns by position this season, with first TD trends marked separately.</p></div>
+  return `<div><h2>Game matchups, Week ${D.week}</h2><p class="hint">One game at a time: who scores first, each team's first TD history home and away, and all touchdowns by position.</p></div>
     <div class="filters"><label for="game-pick" class="sub">Game</label>
     <select id="game-pick">${games.map(x => `<option value="${esc(x[0].team)}" ${x === g ? "selected" : ""}>${esc(x[0].day)} ${esc(x[0].kick)}: ${esc(nick(x[0].opp.startsWith("@") ? x[0].team : x[1].team))} @ ${esc(nick(x[0].opp.startsWith("@") ? x[1].team : x[0].team))}</option>`).join("")}</select></div>
-  <section class="panel" style="gap:8px">
-    <h3>First TD of the game: which team</h3>
-    <div class="sub">${away.gameFirstVegas ? "From the Vegas spread." : "From each team's first TD record; no betting line yet."}</div>
-    <div class="splitbar"><span class="a" style="width:${parseInt(away.gameFirst)}%">${esc(away.team)} ${esc(away.gameFirst)}</span><span class="b" style="width:${parseInt(home.gameFirst)}%">${esc(home.team)} ${esc(home.gameFirst)}</span></div>
-  </section>
+  ${firstMatchup(away, home)}
   <div class="vs">${panel(away, home)}${panel(home, away)}</div>`;
 }
 function panel(r, o) {
@@ -536,8 +617,11 @@ function panel(r, o) {
         <span class="avg" style="left:${w(D.nflAvg[p])}%" title="NFL average ${D.nflAvg[p]}"></span>
       </div></div>`).join("")}</div>
     <div class="key"><span><i style="background:var(--accent)"></i>${esc(r.team)} rush + rec TDs</span><span><i style="background:var(--muted)"></i>${esc(o.team)} allowed</span><span>Dashed line: NFL average</span></div>
-    <h3>First TDs by position, season</h3>
-    <div class="mixes">${mixBar(`${r.team} 1st TDs`, r.teamPos)}${mixBar(`${o.team} allows 1st TD`, r.oppPos)}</div>
+    <h3>First TDs by position, home and away</h3>
+    ${positionSplit(`${r.team} team's 1st TD`, firstHistory(r.team), "pos", venueNow(r))}
+    ${positionSplit(`${o.team} allows team's 1st TD`, firstHistory(o.team), "allowedPos", venueNow(o))}
+    <h3>Who has scored ${esc(r.team)}'s first TDs</h3>
+    ${scorerTable(r)}
     <h3>Best TD plays on this team</h3>
     <table class="mini"><thead><tr><th>Player</th><th>Any TD</th><th>Fair odds</th><th>Team's 1st</th><th>RZ share</th><th>In 10</th></tr></thead><tbody>
       ${D.players.filter(p => p.team === r.team && !p.unavailable).slice(0, 5).map(p => `<tr><td><b>${esc(p.player)}</b> <span class="chip ${esc(p.pos)}">${esc(p.pos)}</span> ${statusTag(p)}</td><td><b>${pctText(p.anyRate)}</b></td><td>${oddsText(p.anyRate)}</td><td>${pctText(p.firstRate)}</td><td>${pctText(p.rzsh)}</td><td>${pctText(p.i10sh)}</td></tr>`).join("")}
@@ -855,7 +939,7 @@ $("#update-btn").onclick = async () => {
     const resp = await fetch(EXPORT_URL);
     if (!resp.ok) throw new Error("Couldn't reach the sheet. Check that it's still shared by link, then try again.");
     const fresh = parseWorkbook(await resp.arrayBuffer());
-    fresh.recent = D.recent; fresh.qbPrev = D.qbPrev; fresh.model = D.model; fresh.season = D.season; fresh.lines = D.lines; fresh.injuries = D.injuries; fresh.injuriesAt = D.injuriesAt;
+    fresh.recent = D.recent; fresh.qbPrev = D.qbPrev; fresh.neutral = D.neutral; fresh.model = D.model; fresh.season = D.season; fresh.lines = D.lines; fresh.injuries = D.injuries; fresh.injuriesAt = D.injuriesAt;
     try {
       const inj = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries");
       if (inj.ok) { fresh.injuries = parseInjuries(await inj.json()); fresh.injuriesAt = new Date().toISOString(); }
@@ -882,7 +966,8 @@ addEventListener("hashchange", () => { if (fromHash()) render(); });
 render();
 if (location.hash === "#selftest") { // tests/test_build.py reads this to check the page scores players the way build.py does.
   const out = document.createElement("pre"); out.id = "selftest";
-  out.textContent = JSON.stringify({ players: D.players.map(p => [p.team, p.player, p.anyRate, p.firstRate, p.gameRate, fairOdds(p.anyRate)]), values: [[0.45, "+150"], [0.45, "100"], [0.6, "-150"], [0.3, "abc"]].map(([p, t]) => verdict(p, t)[0]), picks: D.slate.map(r => [r.team, r.player]),
+  out.textContent = JSON.stringify({ players: D.players.map(p => [p.team, p.player, p.anyRate, p.firstRate, p.gameRate, fairOdds(p.anyRate)]), firsts: D.slate.map(r => [r.team, firstHistory(r.team)]),
+    matchups: games.map(g => { state.game = g[0].team; return (viewMatchups().match(/<table class="mini firsts">/g) || []).length; }), values: [[0.45, "+150"], [0.45, "100"], [0.6, "-150"], [0.3, "abc"]].map(([p, t]) => verdict(p, t)[0]), picks: D.slate.map(r => [r.team, r.player]),
     kickoffs: ["2026-09-13", "2026-11-01", "2026-11-08", "2027-01-03", "2027-03-14"].map(d => kickoffIso(d, "13:00")) });
   document.body.append(out);
 }

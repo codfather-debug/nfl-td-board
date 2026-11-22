@@ -111,6 +111,12 @@ def game_lines(week):
     return out
 
 
+def neutral_sites():
+    """TEAM|week for games at a neutral site. The sheet calls them home or away, but neither team was at home."""
+    return sorted(f"{team}|{g['week']}" for g in season_games()
+                  if g["game_type"] == "REG" and g["location"] == "Neutral" for team in (g["home_team"], g["away_team"]))
+
+
 def counted_games(refreshed):
     """(team, week) of games played before the sheet's refresh, which its usage totals include."""
     cutoff = datetime.datetime.strptime(refreshed.split(",")[0], "%m/%d/%Y").date().isoformat()
@@ -572,6 +578,11 @@ def main(path):
     except Exception as e:
         print(f"Last season's stats unavailable: {e}")
         data["qbPrev"] = {}
+    try:
+        data["neutral"] = neutral_sites()
+    except Exception as e:
+        print(f"Game sites unavailable: {e}")
+        data["neutral"] = []
     try:
         data["lines"] = game_lines(week)
     except Exception as e:

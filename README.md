@@ -36,6 +36,12 @@ the page's Results tab.
 `build.py` also writes `chances.json`, each player's any-TD chance for the week. The NFL Stat Board
 reads it from this site so both show the same number for Anytime TD.
 
+The Matchups tab shows who scores first in each game: the model's chances, each team's record of
+scoring and allowing the game's first TD, and who has scored its first TDs, home and away. These
+come from the sheet's 1st TD Log, for games before the current week. Neutral-site games (from
+nflverse) count only under All. The records are display only: over 2020 to 2026 they didn't improve
+on the point spread.
+
 ## The model in one paragraph
 
 Two logistic regressions, one for any TD and one for the team's first TD, read eight things about a
