@@ -185,9 +185,10 @@ class BuiltPage(unittest.TestCase):
             self.assertEqual(name, chosen["player"] if chosen else row["player"], team)
 
         slate, played = self.data["slate"], {l["Team"] for l in self.data["log"] if l["Week"] == self.data["week"] and l.get("Game 1st TD Team")}
-        # Records and two scorer tables, plus the chances until the game is played.
-        expected = [3 if {slate[i]["team"], slate[i + 1]["team"]} & played else 4 for i in range(0, len(slate), 2)]
-        self.assertEqual(page["matchups"], expected, "A matchup is missing a first TD table.")
+        cards = ",".join(f'data-card="{name}"' for name in ("record", "scorers", "away", "home"))
+        # Two scorer tables, plus the chances until the game is played. The record is at the top, in its own card.
+        expected = [[cards, 2 if {slate[i]["team"], slate[i + 1]["team"]} & played else 3] for i in range(0, len(slate), 2)]
+        self.assertEqual(page["matchups"], expected, "A matchup is missing a card or a first TD table.")
         neutral = set(self.data.get("neutral") or [])
         for team, shown in page["firsts"]:
             games = [l for l in self.data["log"] if l["Team"] == team and l["Week"] < self.data["week"]]

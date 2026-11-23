@@ -148,18 +148,42 @@ select, input[type="search"] { background: var(--surface); border: 1px solid var
 .mini td { text-align: right; padding: 3px 0 3px 8px; border-top: 1px solid var(--line); }
 .mini th:first-child, .mini td:first-child { text-align: left; padding-left: 0; }
 .mixes { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 14px; }
-.first-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 18px 28px; align-items: start; }
-.first-grid > div { display: grid; gap: 8px; min-width: 0; }
+details.card { display: block; padding: 0; }
+.card > summary { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; list-style: none; border-radius: 6px; }
+.card > summary::-webkit-details-marker { display: none; }
+.card > summary:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.card > summary:focus-visible { outline-offset: -2px; }
+.card > summary .title { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.card > summary .toggle { flex: none; width: 9px; height: 9px; margin: 0 4px; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.card[open] > summary .toggle { transform: rotate(225deg); }
+.card[open] > summary .peek { display: none; }
+.card-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 2px 14px 14px; }
+.vs { align-items: start; }
+.collapse-all { margin-left: auto; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--accent); font-size: 14px; font-weight: 600; cursor: pointer; }
+.h2h { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; width: 100%; max-width: 760px; margin: 0 auto; }
+.h2h > * { padding: 10px 8px; }
+.h2h .team { font: 700 24px/1.1 var(--display); text-transform: uppercase; text-align: center; }
+.h2h .team small { display: block; margin-top: 3px; font: 600 12px/1.3 var(--body); color: var(--muted); letter-spacing: .05em; }
+.h2h .stat, .h2h .what { align-self: stretch; border-top: 1px solid var(--line); }
+.h2h .stat { display: grid; gap: 5px; align-content: center; text-align: center; }
+.h2h .what { display: flex; align-items: center; justify-content: center; text-align: center; font: 600 16px/1.1 var(--display); text-transform: uppercase; color: var(--muted); }
+.h2h .record { font: 700 30px/1 var(--display); }
+.h2h .record em { font: 600 14px var(--body); color: var(--muted); font-style: normal; white-space: nowrap; }
+.h2h .meter { width: 100%; max-width: 190px; justify-self: center; }
+.h2h .home .meter i { background: var(--muted); }
+.h2h .other { color: var(--muted); font-size: 12.5px; }
+.h2h .other span { display: inline-block; padding: 0 5px; white-space: nowrap; }
 .mini.firsts th, .mini.firsts td { padding: 4px 5px; }
 .mini.firsts th:first-child, .mini.firsts td:first-child { padding-left: 0; }
 .mini.firsts thead tr + tr th:first-child { text-align: right; padding-left: 5px; }
 .mini.firsts .now { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--fg); font-weight: 700; }
 .mini.firsts .span { text-align: center; }
-.mini.firsts .pair td { border-top: 2px solid var(--line); }
-.mini.firsts small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
 .mixes.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .mixes.three .mix span { font-size: 11.5px; letter-spacing: -.01em; }
-@media (max-width: 520px) { .mixes.three { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) {
+  .mixes.three { grid-template-columns: minmax(0, 1fr); }
+  .h2h > * { padding: 9px 3px; } .h2h .team { font-size: 21px; } .h2h .record { font-size: 26px; } .h2h .record em { display: block; margin-top: 3px; }
+}
 .splitbar { display: flex; height: 26px; border-radius: 4px; overflow: hidden; font: 700 15px/26px var(--display); }
 .splitbar span { padding: 0 8px; white-space: nowrap; overflow: hidden; }
 .splitbar .a { background: var(--accent); color: var(--accent-fg); }
@@ -562,54 +586,79 @@ function scorerTable(r) {
     ${h.scorers.map(s => `<tr><td>${esc(s.player)}${out(s.player) ? ` <span class="flag bad">Out</span>` : ""}</td>${[s.team1, s.game1].map(c => VENUES.map(([venue]) => `<td${nowClass(venue, now)}>${c[venue] || "–"}</td>`).join("")).join("")}</tr>`).join("")}
   </tbody></table>`;
 }
-function firstMatchup(away, home) {
-  const played = D.log.find(l => l.Team === home.team && l.Week === D.week && l["Game 1st TD Team"]);
+/* Matchup cards collapse. Which ones are closed is kept in this browser, and applies to every game. */
+const CARDS = ["record", "scorers", "away", "home"], CARDS_KEY = "td-board-closed-cards";
+let closedCards = new Set();
+try { closedCards = new Set([].concat(JSON.parse(localStorage.getItem(CARDS_KEY)) || []).filter(id => CARDS.includes(id))); } catch (e) { /* Storage is optional. */ }
+const allClosed = () => CARDS.every(id => closedCards.has(id));
+function saveCards() {
+  try { localStorage.setItem(CARDS_KEY, JSON.stringify([...closedCards])); } catch (e) { /* Kept for this visit only. */ }
+}
+function card(id, title, peek, body) { // peek is the one line shown while the card is closed.
+  return `<details class="panel card" data-card="${id}" ${closedCards.has(id) ? "" : "open"}>
+    <summary><span class="title">${title}<span class="sub peek">${peek}</span></span><span class="toggle" aria-hidden="true"></span></summary>
+    <div class="card-body">${body}</div></details>`;
+}
+const gamePlayed = r => D.log.find(l => l.Team === r.team && l.Week === D.week && l["Game 1st TD Team"]);
+function recordCard(away, home) {
+  const played = gamePlayed(home), neutral = venueNow(home) === "All";
   const history = { [away.team]: firstHistory(away.team), [home.team]: firstHistory(home.team) };
-  const row = (r, field, label, pair) => {
-    const now = venueNow(r);
-    return `<tr${pair ? ' class="pair"' : ""}><td><b>${esc(r.team)}</b> ${label}</td>${VENUES.map(([venue]) => {
-      const v = history[r.team][venue];
-      return `<td${nowClass(venue, now)}>${v.gp ? `${v[field]} of ${v.gp}<small>${pct(v[field] / v.gp)}</small>` : "–"}</td>`;
-    }).join("")}</tr>`;
+  const stat = (r, side, field) => {
+    const now = venueNow(r), h = history[r.team], v = h[now];
+    const others = VENUES.filter(([venue]) => venue !== now).map(([venue]) =>
+      `<span>${venue === "All" ? "Season" : venue} ${h[venue].gp ? `${h[venue][field]} of ${h[venue].gp}` : "–"}</span>`).join("");
+    return `<div class="stat ${side}"><span class="record">${v.gp ? `${v[field]} of ${v.gp} <em>${pct(v[field] / v.gp)}</em>` : "–"}</span>
+      <span class="meter"><i style="width:${v.gp ? v[field] / v.gp * 100 : 0}%"></i></span><span class="other">${others}</span></div>`;
   };
-  const likely = D.players.filter(p => (p.team === away.team || p.team === home.team) && !p.unavailable).sort((x, y) => y.gameRate - x.gameRate).slice(0, 6);
-  return `<section class="panel">
-    <h3>Who scores the game's first TD</h3>
+  const team = r => `<div class="team">${esc(nick(r.team))}<small>${neutral ? "SEASON" : venueNow(r) === "Away" ? "ON THE ROAD" : "AT HOME"}</small></div>`;
+  const short = r => {
+    const now = venueNow(r), v = history[r.team][now];
+    return `${esc(r.team)} ${v.gp ? `${v.scored} of ${v.gp}` : "no games"}${now === "All" ? "" : now === "Away" ? " away" : " at home"}`;
+  };
+  const peek = played ? `${esc(played["Game 1st TD Team"])} scored first, ${esc(played["Game 1st TD Scorer"])}` : `Scored first: ${short(away)}, ${short(home)}`;
+  return card("record", "<h3>First TD head to head</h3>", peek, `
     ${played ? `<div><b>Result: ${esc(played["Game 1st TD Team"])} scored first, ${esc(played["Game 1st TD Scorer"])}.</b> <span class="sub">The records below are from before this game.</span></div>` : ""}
-    <div><div class="sub" style="margin-bottom:5px">${away.gameFirstVegas ? "Each team's chance, from the Vegas spread." : "Each team's chance, from its first TD record. No betting line yet."}${venueNow(home) === "All" ? " Neutral site, so neither team is at home." : ""}</div>
-      <div class="splitbar"><span class="a" style="width:${parseInt(away.gameFirst)}%">${esc(away.team)} ${esc(away.gameFirst)}</span><span class="b" style="width:${parseInt(home.gameFirst)}%">${esc(home.team)} ${esc(home.gameFirst)}</span></div></div>
-    <div class="first-grid">
-      <div><h3>Most likely first scorer</h3>
-        ${played ? `<div class="sub">Not shown once a game is played, because the chances would now include that game's own stats. The Results tab keeps the ones locked at kickoff.</div>` : likely.length ? `<table class="mini firsts"><thead><tr><th>Player</th><th>Team</th><th>Chance</th><th>Fair odds</th></tr></thead><tbody>
-          ${likely.map(p => `<tr><td>${esc(p.player)} <span class="chip ${esc(p.pos)}">${esc(p.pos)}</span> ${statusTag(p)}</td><td>${esc(p.team)}</td><td><b>${pctText(p.gameRate)}</b></td><td>${oddsText(p.gameRate)}</td></tr>`).join("")}
-        </tbody></table>` : `<div class="sub">Player chances couldn't be loaded.</div>`}</div>
-      <div><h3>First TD record, home and away</h3>
-        <table class="mini firsts"><thead><tr><th>Team</th>${VENUES.map(([, label]) => `<th>${label}</th>`).join("")}</tr></thead><tbody>
-          ${row(away, "scored", "scored first")}${row(home, "allowed", "allowed first")}${row(home, "scored", "scored first", true)}${row(away, "allowed", "allowed first")}
-        </tbody></table></div>
+    <div class="h2h">
+      ${team(away)}<div></div>${team(home)}
+      ${stat(away, "away", "scored")}<div class="what">Scored<br>first</div>${stat(home, "home", "scored")}
+      ${stat(away, "away", "allowed")}<div class="what">Allowed<br>first</div>${stat(home, "home", "allowed")}
     </div>
-    ${how("Shaded cells match where each team plays this week. Each pair of rows puts one team's record of scoring the game's first TD beside its opponent's record of allowing it. Neutral-site games count only under All. These records are context and don't change the chances: over 2020 to 2026 they didn't improve on the point spread, and a split of four or five games swings a lot on luck.")}
-  </section>`;
+    <div><div class="sub" style="margin-bottom:5px">${away.gameFirstVegas ? "Chance to score first this game, from the Vegas spread." : "Chance to score first this game, from each team's record. No betting line yet."}${neutral ? " Neutral site, so neither team is at home." : ""}</div>
+      <div class="splitbar"><span class="a" style="width:${parseInt(away.gameFirst)}%">${esc(away.team)} ${esc(away.gameFirst)}</span><span class="b" style="width:${parseInt(home.gameFirst)}%">${esc(home.team)} ${esc(home.gameFirst)}</span></div></div>
+    ${how("The big number is how many games the team scored, or allowed, the game's first TD where it plays this week: at home or on the road. The small numbers are the other venue and the whole season. Neutral-site games count only toward the season. These records are context and don't change the chances: over 2020 to 2026 they didn't improve on the point spread, and a split of four or five games swings a lot on luck.")}`);
+}
+function scorersCard(away, home) {
+  const played = gamePlayed(home);
+  const likely = D.players.filter(p => (p.team === away.team || p.team === home.team) && !p.unavailable).sort((x, y) => y.gameRate - x.gameRate).slice(0, 6);
+  const peek = played ? "Game played" : likely.slice(0, 3).map(p => `${esc(p.player)} ${pctText(p.gameRate)}`).join(", ");
+  return card("scorers", "<h3>Most likely first scorer</h3>", peek,
+    played ? `<div class="sub">Not shown once a game is played, because the chances would now include that game's own stats. The Results tab keeps the ones locked at kickoff.</div>`
+    : likely.length ? `<table class="mini firsts"><thead><tr><th>Player</th><th>Team</th><th>Chance</th><th>Fair odds</th></tr></thead><tbody>
+        ${likely.map(p => `<tr><td>${esc(p.player)} <span class="chip ${esc(p.pos)}">${esc(p.pos)}</span> ${statusTag(p)}</td><td>${esc(p.team)}</td><td><b>${pctText(p.gameRate)}</b></td><td>${oddsText(p.gameRate)}</td></tr>`).join("")}
+      </tbody></table>` : `<div class="sub">Player chances couldn't be loaded.</div>`);
 }
 function viewMatchups() {
   const g = games.find(x => x.some(r => r.team === state.game)) || games[0];
   const [a, b] = g;
   const away = a.opp.startsWith("@") ? a : b, home = away === a ? b : a;
-  return `<div><h2>Game matchups, Week ${D.week}</h2><p class="hint">One game at a time: who scores first, each team's first TD history home and away, and all touchdowns by position.</p></div>
+  return `<div><h2>Game matchups, Week ${D.week}</h2><p class="hint">One game at a time, starting with who scores first. Select a card's title to close or open it.</p></div>
     <div class="filters"><label for="game-pick" class="sub">Game</label>
-    <select id="game-pick">${games.map(x => `<option value="${esc(x[0].team)}" ${x === g ? "selected" : ""}>${esc(x[0].day)} ${esc(x[0].kick)}: ${esc(nick(x[0].opp.startsWith("@") ? x[0].team : x[1].team))} @ ${esc(nick(x[0].opp.startsWith("@") ? x[1].team : x[0].team))}</option>`).join("")}</select></div>
-  ${firstMatchup(away, home)}
-  <div class="vs">${panel(away, home)}${panel(home, away)}</div>`;
+    <select id="game-pick">${games.map(x => `<option value="${esc(x[0].team)}" ${x === g ? "selected" : ""}>${esc(x[0].day)} ${esc(x[0].kick)}: ${esc(nick(x[0].opp.startsWith("@") ? x[0].team : x[1].team))} @ ${esc(nick(x[0].opp.startsWith("@") ? x[1].team : x[0].team))}</option>`).join("")}</select>
+    <button class="collapse-all" data-collapseall>${allClosed() ? "Expand all" : "Collapse all"}</button></div>
+  ${recordCard(away, home)}
+  ${scorersCard(away, home)}
+  <div class="vs">${panel(away, home, "away")}${panel(home, away, "home")}</div>`;
 }
-function panel(r, o) {
+function panel(r, o, side) {
   const off = D.off[r.team] || {}, dfn = D.dfn[o.team] || {};
   const tot = t => (t ? t[0] + t[1] : 0);
   const max = Math.max(1, ...POS.flatMap(p => [tot(off[p]), tot(dfn[p]), D.nflAvg[p] || 0]));
   const w = v => v / max * 88;
   const t = tw[r.team] || {};
   const gpO = (fScored[r.team] || {}).GP, gpD = (fAllowed[o.team] || {}).GP;
-  return `<section class="panel">
-    <div class="panel-head"><div><h2>${esc(nick(r.team))} offense</h2><div class="sub">vs ${esc(nick(o.team))} defense · ${gpO} and ${gpD} games${r.imp == null ? "" : ` · projected ${r.imp.toFixed(1)} points`}</div></div></div>
+  const best = D.players.filter(p => p.team === r.team && !p.unavailable)[0];
+  const title = `<h2>${esc(nick(r.team))} offense</h2><span class="sub">vs ${esc(nick(o.team))} defense · ${gpO} and ${gpD} games${r.imp == null ? "" : ` · projected ${r.imp.toFixed(1)} points`}</span>`;
+  return card(side, title, best ? `Top TD play: ${esc(best.player)} ${pctText(best.anyRate)}` : "", `
     <h3>All TDs by position, season</h3>
     <div class="bars">${POS.map(p => `<div class="bar-row"><span class="chip ${p}">${p}</span><div class="bar-pair">
         <div class="bar o"><i style="width:${w(tot(off[p]))}%"></i><b>${tot(off[p])}</b></div>
@@ -626,8 +675,7 @@ function panel(r, o) {
     <table class="mini"><thead><tr><th>Player</th><th>Any TD</th><th>Fair odds</th><th>Team's 1st</th><th>RZ share</th><th>In 10</th></tr></thead><tbody>
       ${D.players.filter(p => p.team === r.team && !p.unavailable).slice(0, 5).map(p => `<tr><td><b>${esc(p.player)}</b> <span class="chip ${esc(p.pos)}">${esc(p.pos)}</span> ${statusTag(p)}</td><td><b>${pctText(p.anyRate)}</b></td><td>${oddsText(p.anyRate)}</td><td>${pctText(p.firstRate)}</td><td>${pctText(p.rzsh)}</td><td>${pctText(p.i10sh)}</td></tr>`).join("")}
     </tbody></table>
-    <div class="sub">Red-zone run rate: <b>${pct(t.rzRun)}</b> (inside 10: ${pct(t.i10Run)}). ${esc(o.team)} faces ${pct(t.oppRzRun)}. NFL average 46%, inside 10 52%.</div>
-  </section>`;
+    <div class="sub">Red-zone run rate: <b>${pct(t.rzRun)}</b> (inside 10: ${pct(t.i10Run)}). ${esc(o.team)} faces ${pct(t.oppRzRun)}. NFL average 46%, inside 10 52%.</div>`);
 }
 
 /* ---- Defenses ---- */
@@ -784,6 +832,11 @@ $("#view").addEventListener("click", e => {
   const d = b.dataset;
   if (d.game) return go("matchups", { game: d.game });
   if (d.open) { state.open = state.open === d.open ? null : d.open; return render(); }
+  if ("collapseall" in d) {
+    closedCards = allClosed() ? new Set() : new Set(CARDS);
+    saveCards(); render();
+    return $(".collapse-all").focus();
+  }
   if ("playstarted" in d) { state.plays.started = !state.plays.started; return render(); }
   if (d.seg) {
     const v = d.val;
@@ -809,6 +862,12 @@ $("#view").addEventListener("change", e => {
   if (id === "log-week") { state.log.week = v; render(); }
   if (id === "results-week") { state.resultsWeek = v; render(); }
 });
+$("#view").addEventListener("toggle", e => { // A toggle doesn't bubble, so listen on the way down.
+  const id = e.target.dataset.card; if (!id) return;
+  if (e.target.open) closedCards.delete(id); else closedCards.add(id);
+  saveCards();
+  const all = $(".collapse-all"); if (all) all.textContent = allClosed() ? "Expand all" : "Collapse all";
+}, true);
 $("#view").addEventListener("input", e => {
   if (e.target.id === "ply-q") { state.ply.q = e.target.value; fillPlayers(); }
   const key = e.target.dataset.price;
@@ -967,7 +1026,7 @@ render();
 if (location.hash === "#selftest") { // tests/test_build.py reads this to check the page scores players the way build.py does.
   const out = document.createElement("pre"); out.id = "selftest";
   out.textContent = JSON.stringify({ players: D.players.map(p => [p.team, p.player, p.anyRate, p.firstRate, p.gameRate, fairOdds(p.anyRate)]), firsts: D.slate.map(r => [r.team, firstHistory(r.team)]),
-    matchups: games.map(g => { state.game = g[0].team; return (viewMatchups().match(/<table class="mini firsts">/g) || []).length; }), values: [[0.45, "+150"], [0.45, "100"], [0.6, "-150"], [0.3, "abc"]].map(([p, t]) => verdict(p, t)[0]), picks: D.slate.map(r => [r.team, r.player]),
+    matchups: games.map(g => { state.game = g[0].team; const html = viewMatchups(); return [(html.match(/data-card="\w+"/g) || []).join(), (html.match(/<table class="mini firsts">/g) || []).length]; }), values: [[0.45, "+150"], [0.45, "100"], [0.6, "-150"], [0.3, "abc"]].map(([p, t]) => verdict(p, t)[0]), picks: D.slate.map(r => [r.team, r.player]),
     kickoffs: ["2026-09-13", "2026-11-01", "2026-11-08", "2027-01-03", "2027-03-14"].map(d => kickoffIso(d, "13:00")) });
   document.body.append(out);
 }
