@@ -183,6 +183,7 @@ details.card { display: block; padding: 0; }
 @media (max-width: 520px) {
   .mixes.three { grid-template-columns: minmax(0, 1fr); }
   .h2h > * { padding: 9px 3px; } .h2h .team { font-size: 21px; } .h2h .record { font-size: 26px; } .h2h .record em { display: block; margin-top: 3px; }
+  .mini { font-size: 13px; } .mini th { font-size: 11.5px; } .mini th, .mini td { padding-left: 5px; }
 }
 .splitbar { display: flex; height: 26px; border-radius: 4px; overflow: hidden; font: 700 15px/26px var(--display); }
 .splitbar span { padding: 0 8px; white-space: nowrap; overflow: hidden; }
@@ -633,8 +634,8 @@ function scorersCard(away, home) {
   const peek = played ? "Game played" : likely.slice(0, 3).map(p => `${esc(p.player)} ${pctText(p.gameRate)}`).join(", ");
   return card("scorers", "<h3>Most likely first scorer</h3>", peek,
     played ? `<div class="sub">Not shown once a game is played, because the chances would now include that game's own stats. The Results tab keeps the ones locked at kickoff.</div>`
-    : likely.length ? `<table class="mini firsts"><thead><tr><th>Player</th><th>Team</th><th>Chance</th><th>Fair odds</th></tr></thead><tbody>
-        ${likely.map(p => `<tr><td>${esc(p.player)} <span class="chip ${esc(p.pos)}">${esc(p.pos)}</span> ${statusTag(p)}</td><td>${esc(p.team)}</td><td><b>${pctText(p.gameRate)}</b></td><td>${oddsText(p.gameRate)}</td></tr>`).join("")}
+    : likely.length ? `<table class="mini firsts"><thead><tr><th>Player</th><th>Game's 1st</th><th>Fair odds</th><th>Team's 1st</th><th>RZ share</th><th>In 10</th></tr></thead><tbody>
+        ${likely.map(p => `<tr><td>${esc(p.player)} <span class="sub">${esc(p.team)}</span> <span class="chip ${esc(p.pos)}">${esc(p.pos)}</span> ${statusTag(p)}</td><td><b>${pctText(p.gameRate)}</b></td><td>${oddsText(p.gameRate)}</td><td>${pctText(p.firstRate)}</td><td>${pctText(p.rzsh)}</td><td>${pctText(p.i10sh)}</td></tr>`).join("")}
       </tbody></table>` : `<div class="sub">Player chances couldn't be loaded.</div>`);
 }
 function viewMatchups() {
