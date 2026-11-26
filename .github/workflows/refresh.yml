@@ -8,6 +8,11 @@ on:
     - cron: "0 16 * * 0,6"
     - cron: "0 21 * * 1,4"
   workflow_dispatch:
+    inputs:
+      discord_test:
+        description: "Also send a test post to Discord"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -43,3 +48,12 @@ jobs:
             git pull --rebase
             git push
           fi
+      - name: Post to Discord
+        # After publishing, so only what went live is posted. A Discord problem never fails the refresh.
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_TEST: ${{ inputs.discord_test }}
+        run: |
+          if [ "$DISCORD_TEST" = "true" ]; then python discord_post.py --test; fi
+          python discord_post.py --since "$GITHUB_SHA"
